@@ -3,8 +3,6 @@ import numpy as np
 import pandas as pd
 
 
-uea_dir = '/home/thachln/myworkdir/data/UEA_2018_univariate_arff/'
-
 # code taken from https://github.com/alan-turing-institute/sktime/blob/master/sktime/utils/load_data.py
 def load_from_arff_to_dataframe(
     full_file_path_and_name,
@@ -93,60 +91,6 @@ def load_from_arff_to_dataframe(
 
     return x_data
 
-def read_data(input_file):    
-    if input_file.lower().endswith(".csv"):
-        train_data = np.genfromtxt(input_file,delimiter=',')
-        X = train_data[:,1:]
-        y = train_data[:,0]
-    elif input_file.lower().endswith(".arff"):
-        #from sktime.utils.load_data import load_from_arff_to_dataframe
-        X,y = load_from_arff_to_dataframe(input_file)
-
-    return X, y
-
-
-# def read_arff(arff_file):
-#     data = arff.loadarff(arff_file)
-#     X = []
-#     y = []
-#     for ts in data[0]:
-#         ts_as_list = ts.tolist()
-#         X.append(list(ts_as_list[:-1]))
-#         y.append(ts_as_list[-1])
-    
-#     return X,y
-
-
-
-def get_uea_path(ds):
-    train_file = uea_dir + ds + '/' + ds + '_TRAIN.arff' 
-    test_file = uea_dir + ds + '/' + ds + '_TEST.arff'
-    return train_file,test_file
-
-
-def get_ucr_data(ds):
-    train_file,test_file = get_ucr_path(ds)
-    train_x, train_y = read_data(train_file)
-    test_x, test_y = read_data(test_file)
-
-    return train_x, train_y, test_x, test_y
-
-
-
-def np_array_to_df(nparray):
-    X = pd.DataFrame()
-    X['dim_0'] = [pd.Series(x) for x in nparray]
-    return X
-
-def load_uea_arff_data(ds):    
-    train_file, test_file = get_uea_path(ds)
-    train_x, train_y = read_data(train_file)
-    test_x, test_y = read_data(test_file)
-
-    return train_x, train_y, test_x, test_y
-
-
-
 def read_reps_from_file(inputf):
     last_cfg = None
     mr_seqs = []
@@ -168,7 +112,5 @@ def read_reps_from_file(inputf):
         mr_seqs.append(rep)    
     return mr_seqs
 
-def load_uea_sfa_reps(ds):
-    sfa_dir = "/home/thachln/myworkdir/experiments/sfa_x2_uea/"
-    return read_reps_from_file(sfa_dir + ds + '/sfa.train'), read_reps_from_file(sfa_dir + ds + '/sfa.test')
+
 

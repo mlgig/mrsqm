@@ -102,13 +102,8 @@ cdef extern from "strie.cpp":
 
 cdef extern from "sqminer.h":
     cdef cppclass SQMiner:
-        SQMiner(double, double)        
-        # void learn(vector[string] &, vector[double] &)
-        # double brute_classify(string , double)
-        # void print_model(int)
+        SQMiner(double, double)
         vector[string] mine(vector[string] &, vector[int] &)
-        # vector[double] get_coefficients(bool)
-
 
 cdef class PyFeatureTrie:
     cdef SeqTrie *thisptr
@@ -136,11 +131,7 @@ cdef class PySQM:
 
 
 
-class MrSQMClassifier:
-
-    # selection <= 0: brute force selection
-    # selection > 0 and selection < 1 : chisquared test with p value threshold = selection
-    # selection >= 1: top k selection with k = int(selection)    
+class MrSQMClassifier:    
 
     def __init__(self, strat = 'SR', features_per_rep = 1000, selection_per_rep = 2000, symrep=['sax'], symrepconfig=None, xrep = 4):
 
@@ -151,16 +142,11 @@ class MrSQMClassifier:
         else:
             self.config = symrepconfig
 
-        self.strat = strat
-
-        #self.label_dict = {} # for translating labels since seql only accept [1.-1] as labels
+        self.strat = strat   
 
         # all the unique labels in the data
         # in case of binary data the first one is always the negative class
         self.classes_ = []
-
-
-
         self.clf = None # scikit-learn model
 
         # store fitted sfa for later transformation
@@ -168,9 +154,9 @@ class MrSQMClassifier:
 
         self.fpr = features_per_rep
         self.spr = selection_per_rep
-        self.xrep = xrep
+        self.xrep = xrep  
+        self.filters = [] # feature filters (one filter for a rep) for test data transformation
 
-        self.filters = []
         debug_logging("Initialize MrSQM Classifier.")
         debug_logging("Feature Selection Strategy: " + strat)
         debug_logging("Mode: " + str(self.xrep))
@@ -252,30 +238,10 @@ class MrSQMClassifier:
                                         cfg['alphabet'])].timeseries2SFAseq(ts.values)
                         tssr.append(sr)
 
-                multi_tssr.append(tssr)
-
-        
+                multi_tssr.append(tssr)        
 
         return multi_tssr
-
-
-
-    # def to_feature_space(self, mr_seqs):
-        
-    #     full_fm = []
-
-    #     for rep, seq_features in zip(mr_seqs, self.sequences):            
-    #         fm = np.zeros((len(rep), len(seq_features)),dtype = np.int32)
-    #         ft = PyFeatureTrie(seq_features)
-    #         for i,s in enumerate(rep):
-    #             fm[i,:] = ft.search(s)
-    #         full_fm.append(fm)
-
   
-    #     full_fm = np.hstack(full_fm)
-
-    #     return full_fm > 0
-
     def sample_random_sequences(self, seqs, min_length, max_length, max_n_seq):  
                 
         output = set()
@@ -295,7 +261,7 @@ class MrSQMClassifier:
         return list(output)
 
     def feature_selection_on_train(self, mr_seqs, y):
-        
+        debug_logging("Compute train data in subsequence space.")
         full_fm = []
         self.filters = []
 
@@ -402,49 +368,10 @@ class MrSQMClassifier:
         
         debug_logging("Compute feature vectors.")
         train_x = self.feature_selection_on_train(mr_seqs, int_y)
-        # print(train_x)
-        debug_logging("Fit logistic regression model.")
-        self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)
-        # self.clf = BernoulliNB().fit(train_x,y)
-        self.classes_ = self.clf.classes_ # shouldn't matter
-    
-    
-    # def fit_random_selection(self, X, y, ext_reps = None, input_checks=True):
-    # # '''
-    # # random selection after mining
-    # # '''
-    #     # max_selected = self.selection * 3
-
-    #     # transform time series to multiple symbolic representations
-    #     self.classes_ = np.unique(y) #because sklearn also uses np.unique
-
-    #     int_y = [np.where(self.classes_ == c)[0][0] for c in y]
-
-    #     self.sequences = []
-    #     mr_seqs = []
-
-    #     if X is not None:
-    #         mr_seqs = self.transform_time_series(X)
-    #     if ext_reps is not None:
-    #         mr_seqs.extend(ext_reps)
-
-    #     for rep in mr_seqs:
-    #         miner = PySQM(self.max_selection,0.0)
-            
-    #         mined = miner.mine(rep, int_y)       
-    #         # print(len(mined))     
-    #         random_selected = np.random.permutation(mined)[:self.selection].tolist()
-    #         # print(len(random_selected))
-    #         self.sequences.append(random_selected)        
         
-    
-    #     # first computing the feature vectors
-    #     # then fit the new data to a logistic regression model        
-    #     train_x = self.__to_feature_space(mr_seqs)
-    #     self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)
-    #     self.classes_ = self.clf.classes_ # shouldn't matter
-
-   
+        debug_logging("Fit logistic regression model.")
+        self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)        
+        self.classes_ = self.clf.classes_ # shouldn't matter   
 
   
 
