@@ -14,6 +14,8 @@
 
 using namespace std;
 
+// a trie data structure for fast matching subsequences
+
 class FNode
 {
 private:
@@ -27,8 +29,6 @@ private:
 public:
 	int feature_index;
 	map<char, FNode *> children;
-
-	
 
 	
 
@@ -60,56 +60,7 @@ public:
 	FNode *get_child_without_creating(char c)
 	{
 		return children[c];
-	}
-
-    // void reset_count()
-    // {
-    //     this->count = 0;
-    //     for (map<char, FNode *>::iterator itr = children.begin(); itr != children.end(); itr++)
-	// 	{
-	// 		itr->second->reset_count();
-	// 	}	
-
-    // }
-
-    
-
-	// ENode *copy()
-	// {
-	// 	ENode *node = new ENode();
-
-	// 	node->selected = selected;
-	// 	node->chi_square = chi_square;
-	// 	node->external_index = external_index;
-
-	// 	for (map<char, ENode *>::iterator itr = children.begin(); itr != children.end(); itr++)
-	// 	{
-	// 		node->children[itr->first] = itr->second->copy();
-	// 	}
-	// 	return node;
-	// }
-
-	// // print information of this node
-	// void print()
-	// {
-
-	// 	for (int i = 0; i < loc.size(); i++)
-	// 	{
-	// 		cout << loc[i] << " ";
-	// 	}
-	// 	cout << endl;
-	// }
-
-	// // recursive print child nodes
-	// void print_r()
-	// {
-	// 	print();
-
-	// 	for (map<char, ENode *>::iterator itr = children.begin(); itr != children.end(); itr++)
-	// 	{
-	// 		itr->second->print_r();
-	// 	}
-	// }
+	} 
 };
 
 class SeqTrie

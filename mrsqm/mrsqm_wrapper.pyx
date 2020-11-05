@@ -102,15 +102,34 @@ cdef class PySQM:
 ######################### MrSQM Classifier #########################
 
 class MrSQMClassifier:    
+    '''     
+    Overview: MrSQM is an efficient time series classifier utilizing symbolic representations of time series. MrSQM implements four different feature selection strategies (R,S,RS,SR) that can quickly select subsequences from multiple symbolic representations of time series data.
+    
+    Parameters
+    ----------
+    
+    strat               : str, feature selection strategy, either 'R','S','SR', or 'RS'. R and S are single-stage filters while RS and SR are two-stage filters.
+    
+    use_sax             : bool, whether to use the sax transformation. if False, ext_rep must be provided in the fitting and predicting stage.
+    
+    custom_config       : dict, customized parameters for the symbolic transformation.
 
-    def __init__(self, strat = 'SR', features_per_rep = 1000, selection_per_rep = 2000, symrep=['sax'], symrepconfig=None, xrep = 4):
+    features_per_rep    : int, (maximum) number of features selected per representation.
 
-        self.symrep = symrep
+    selection_per_rep   : int, (maximum) number of candidate features selected per representation. Only applied in two stages strategies (RS and SR)
 
-        if symrepconfig is None:
+    xrep                : int, control the number of representations produced by sax transformation.
+
+    '''
+
+    def __init__(self, strat = 'SR', features_per_rep = 1000, selection_per_rep = 2000, use_sax = True, custom_config=None, xrep = 4):
+
+        self.use_sax = use_sax
+
+        if custom_config is None:
             self.config = [] # http://effbot.org/zone/default-values.htm
         else:
-            self.config = symrepconfig
+            self.config = custom_config
 
         self.strat = strat   
 
@@ -169,7 +188,7 @@ class MrSQMClassifier:
 
             pars = self.create_pars(min_ws, max_ws, True)
             
-            if 'sax' in self.symrep:
+            if self.use_sax:
                 for p in pars:
                     self.config.append(
                         {'method': 'sax', 'window': p[0], 'word': p[1], 'alphabet': p[2], 
@@ -302,7 +321,7 @@ class MrSQMClassifier:
 
 
 
-    def fit(self, X, y, ext_reps = None):
+    def fit(self, X, y, ext_rep = None):
         debug_logging("Fit training data.")
         self.classes_ = np.unique(y) #because sklearn also uses np.unique
 
@@ -315,8 +334,8 @@ class MrSQMClassifier:
 
         if X is not None:
             mr_seqs = self.transform_time_series(X)
-        if ext_reps is not None:
-            mr_seqs.extend(self.read_reps_from_file(ext_reps))
+        if ext_rep is not None:
+            mr_seqs.extend(self.read_reps_from_file(ext_rep))
         
         
         for rep in mr_seqs:
@@ -335,21 +354,21 @@ class MrSQMClassifier:
         self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)        
         self.classes_ = self.clf.classes_ # shouldn't matter       
     
-    def transform_test_X(self, X, ext_reps = None):
+    def transform_test_X(self, X, ext_rep = None):
         mr_seqs = []
         if X is not None:
             mr_seqs = self.transform_time_series(X)
-        if ext_reps is not None:
-            mr_seqs.extend(self.read_reps_from_file(ext_reps))
+        if ext_rep is not None:
+            mr_seqs.extend(self.read_reps_from_file(ext_rep))
 
         return self.feature_selection_on_test(mr_seqs)
 
-    def predict_proba(self, X, ext_reps = None):        
-        test_x = self.transform_test_X(X, ext_reps)
+    def predict_proba(self, X, ext_rep = None):        
+        test_x = self.transform_test_X(X, ext_rep)
         return self.clf.predict_proba(test_x) 
 
-    def predict(self, X, ext_reps = None):
-        test_x = self.transform_test_X(X, ext_reps)
+    def predict(self, X, ext_rep = None):
+        test_x = self.transform_test_X(X, ext_rep)
         return self.clf.predict(test_x)
 
 
