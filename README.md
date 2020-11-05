@@ -9,6 +9,15 @@ MrSQM method can quickly extract features from multiple symbolic representations
   * MrSQM-SR: Random sampling of the features from the output of MrSQM-S.
 
 ## Installation
+
+Dependencies
+```
+cython >= 0.29
+numpy >= 1.18
+pandas >= 1.0.3
+scikit-learn >= 0.22
+```
+
 Download the repository: 
 ```
 git clone https://github.com/mlgig/mrsqm.git
