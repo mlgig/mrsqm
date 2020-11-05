@@ -46,6 +46,8 @@ def mrsqm_with_sfa():
     itest = "data/Coffee/Coffee_TEST.txt"
     otrain = 'sfa.train'
     otest = 'sfa.test'
+
+    # run a jar file to do sfa transform
     util.sfa_transform(itrain, itest, otrain, otest)
 
     # train MrSQM-RS with SFA only
