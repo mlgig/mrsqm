@@ -255,6 +255,27 @@ class MrSQMClassifier:
 
         return full_fm
 
+    def read_reps_from_file(self, inputf):
+        last_cfg = None
+        mr_seqs = []
+        rep = []
+        i = 0
+        for l in open(inputf,"r"):
+            i += 1
+            l_splitted = bytes(l,'utf-8').split(b" ")
+            cfg = l_splitted[0]
+            seq = b" ".join(l_splitted[2:])
+            if cfg == last_cfg:
+                rep.append(seq)
+            else:
+                last_cfg = cfg
+                if rep:
+                    mr_seqs.append(rep)
+                rep = [seq]
+        if rep:
+            mr_seqs.append(rep)    
+        return mr_seqs
+
     def mine(self,rep, int_y):        
         mined_subs = []
         if self.strat == 'S':
@@ -295,7 +316,7 @@ class MrSQMClassifier:
         if X is not None:
             mr_seqs = self.transform_time_series(X)
         if ext_reps is not None:
-            mr_seqs.extend(ext_reps)
+            mr_seqs.extend(self.read_reps_from_file(ext_reps))
         
         
         for rep in mr_seqs:
@@ -319,7 +340,7 @@ class MrSQMClassifier:
         if X is not None:
             mr_seqs = self.transform_time_series(X)
         if ext_reps is not None:
-            mr_seqs.extend(ext_reps)
+            mr_seqs.extend(self.read_reps_from_file(ext_reps))
 
         return self.feature_selection_on_test(mr_seqs)
 
