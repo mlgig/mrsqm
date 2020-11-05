@@ -10,8 +10,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import chi2
 
-from sktime.transformers.series_as_features.dictionary_based import SFA
-
 import logging
 
 def debug_logging(message):
@@ -20,7 +18,7 @@ def debug_logging(message):
 
 
 
-######################### SAX and SFA #########################
+######################### SAX #########################
 
 cdef extern from "sax_converter.h":
     cdef cppclass SAX:
@@ -56,34 +54,6 @@ cdef class PySAX:
 
     def map_weighted_patterns(self, ts, sequences, weights):
         return self.thisptr.map_weighted_patterns(ts, sequences, weights)
-
-
-class AdaptedSFA:
-    '''
-    SFA adaptation for Mr-SEQL. This code uses a different alphabet for each Fourier coefficient in the output of SFA.
-    '''
-
-    def __init__(self, int N, int w, int a):
-        self.sfa = SFA(w, a, N, norm=True, remove_repeat_words=True)
-
-    def fit(self, train_x):        
-        self.sfa.fit(train_x)
-
-    def timeseries2SFAseq(self, ts):
-        dfts = self.sfa._mft(ts)
-        sfa_str = b''
-        for window in range(dfts.shape[0]):
-            if sfa_str:
-                sfa_str += b' '
-            dft = dfts[window]
-            first_char = ord(b'A')
-            for i in range(self.sfa.word_length):
-                for bp in range(self.sfa.alphabet_size):
-                    if dft[i] <= self.sfa.breakpoints[i][bp]:
-                        sfa_str += bytes([first_char + bp])                        
-                        break
-                first_char += self.sfa.alphabet_size
-        return sfa_str
 
 ###########################################################################
 
@@ -129,28 +99,44 @@ cdef class PySQM:
         return self.thisptr.mine(sequences, labels)     
 
 
-
+######################### MrSQM Classifier #########################
 
 class MrSQMClassifier:    
+    '''     
+    Overview: MrSQM is an efficient time series classifier utilizing symbolic representations of time series. MrSQM implements four different feature selection strategies (R,S,RS,SR) that can quickly select subsequences from multiple symbolic representations of time series data.
+    
+    Parameters
+    ----------
+    
+    strat               : str, feature selection strategy, either 'R','S','SR', or 'RS'. R and S are single-stage filters while RS and SR are two-stage filters.
+    
+    use_sax             : bool, whether to use the sax transformation. if False, ext_rep must be provided in the fitting and predicting stage.
+    
+    custom_config       : dict, customized parameters for the symbolic transformation.
 
-    def __init__(self, strat = 'SR', features_per_rep = 1000, selection_per_rep = 2000, symrep=['sax'], symrepconfig=None, xrep = 4):
+    features_per_rep    : int, (maximum) number of features selected per representation.
 
-        self.symrep = symrep
+    selection_per_rep   : int, (maximum) number of candidate features selected per representation. Only applied in two stages strategies (RS and SR)
 
-        if symrepconfig is None:
+    xrep                : int, control the number of representations produced by sax transformation.
+
+    '''
+
+    def __init__(self, strat = 'SR', features_per_rep = 1000, selection_per_rep = 2000, use_sax = True, custom_config=None, xrep = 4):
+
+        self.use_sax = use_sax
+
+        if custom_config is None:
             self.config = [] # http://effbot.org/zone/default-values.htm
         else:
-            self.config = symrepconfig
+            self.config = custom_config
 
         self.strat = strat   
 
         # all the unique labels in the data
         # in case of binary data the first one is always the negative class
         self.classes_ = []
-        self.clf = None # scikit-learn model
-
-        # store fitted sfa for later transformation
-        self.sfas = {}
+        self.clf = None # scikit-learn model       
 
         self.fpr = features_per_rep
         self.spr = selection_per_rep
@@ -202,17 +188,12 @@ class MrSQMClassifier:
 
             pars = self.create_pars(min_ws, max_ws, True)
             
-            if 'sax' in self.symrep:
+            if self.use_sax:
                 for p in pars:
                     self.config.append(
                         {'method': 'sax', 'window': p[0], 'word': p[1], 'alphabet': p[2], 
                         # 'dilation': np.int32(2 ** np.random.uniform(0, np.log2((min_len - 1) / (p[0] - 1))))})
-                        'dilation': 1})
-
-            if 'sfa' in self.symrep:
-                for p in pars:
-                    self.config.append(
-                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2]})       
+                        'dilation': 1})            
 
         
         for cfg in self.config:
@@ -223,20 +204,7 @@ class MrSQMClassifier:
                     ps = PySAX(cfg['window'], cfg['word'], cfg['alphabet'], cfg['dilation'])
                     for ts in ts_x.iloc[:,i]:
                         sr = ps.timeseries2SAXseq(ts)
-                        tssr.append(sr)
-                    
-
-                if cfg['method'] == 'sfa':  # convert time series to SFA
-                    if (cfg['window'], cfg['word'], cfg['alphabet']) not in self.sfas:
-                        sfa = AdaptedSFA(
-                            cfg['window'], cfg['word'], cfg['alphabet'])
-                        sfa.fit(ts_x.iloc[:,[i]])
-                        self.sfas[(cfg['window'], cfg['word'],
-                                cfg['alphabet'])] = sfa
-                    for ts in ts_x.iloc[:,i]:
-                        sr = self.sfas[(cfg['window'], cfg['word'],
-                                        cfg['alphabet'])].timeseries2SFAseq(ts.values)
-                        tssr.append(sr)
+                        tssr.append(sr)             
 
                 multi_tssr.append(tssr)        
 
@@ -306,6 +274,27 @@ class MrSQMClassifier:
 
         return full_fm
 
+    def read_reps_from_file(self, inputf):
+        last_cfg = None
+        mr_seqs = []
+        rep = []
+        i = 0
+        for l in open(inputf,"r"):
+            i += 1
+            l_splitted = bytes(l,'utf-8').split(b" ")
+            cfg = l_splitted[0]
+            seq = b" ".join(l_splitted[2:])
+            if cfg == last_cfg:
+                rep.append(seq)
+            else:
+                last_cfg = cfg
+                if rep:
+                    mr_seqs.append(rep)
+                rep = [seq]
+        if rep:
+            mr_seqs.append(rep)    
+        return mr_seqs
+
     def mine(self,rep, int_y):        
         mined_subs = []
         if self.strat == 'S':
@@ -332,16 +321,8 @@ class MrSQMClassifier:
 
 
 
-    def fit(self, X, y, ext_reps = None, input_checks=True):
+    def fit(self, X, y, ext_rep = None):
         debug_logging("Fit training data.")
-
-        # X = self.__X_check(X)
-
-        # transform time series to multiple symbolic representations
-
-        # mr_seqs = self.transform_time_series(X)
-        
-        # print(mr_seqs)
         self.classes_ = np.unique(y) #because sklearn also uses np.unique
 
         int_y = [np.where(self.classes_ == c)[0][0] for c in y]
@@ -353,8 +334,8 @@ class MrSQMClassifier:
 
         if X is not None:
             mr_seqs = self.transform_time_series(X)
-        if ext_reps is not None:
-            mr_seqs.extend(ext_reps)
+        if ext_rep is not None:
+            mr_seqs.extend(self.read_reps_from_file(ext_rep))
         
         
         for rep in mr_seqs:
@@ -371,28 +352,23 @@ class MrSQMClassifier:
         
         debug_logging("Fit logistic regression model.")
         self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)        
-        self.classes_ = self.clf.classes_ # shouldn't matter   
-
-  
-
+        self.classes_ = self.clf.classes_ # shouldn't matter       
     
-    
-
-    def predict_proba(self, X, input_checks=True):
-        
-        mr_seqs = self.transform_time_series(X)
-        test_x = self.feature_selection_on_test(mr_seqs)
-        return self.clf.predict_proba(test_x) 
-
-    def predict(self, X, ext_reps = None, input_checks=True):        
-        
+    def transform_test_X(self, X, ext_rep = None):
         mr_seqs = []
         if X is not None:
             mr_seqs = self.transform_time_series(X)
-        if ext_reps is not None:
-            mr_seqs.extend(ext_reps)
+        if ext_rep is not None:
+            mr_seqs.extend(self.read_reps_from_file(ext_rep))
 
-        test_x = self.feature_selection_on_test(mr_seqs)
+        return self.feature_selection_on_test(mr_seqs)
+
+    def predict_proba(self, X, ext_rep = None):        
+        test_x = self.transform_test_X(X, ext_rep)
+        return self.clf.predict_proba(test_x) 
+
+    def predict(self, X, ext_rep = None):
+        test_x = self.transform_test_X(X, ext_rep)
         return self.clf.predict(test_x)
 
 

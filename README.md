@@ -1,5 +1,13 @@
 # MrSQM: Fast Feature Selection for Time Series Classification with Symbolic Representations
 
+MrSQM (Multiple Representations Sequence Miner) is time series classifier. The 
+MrSQM method can quickly extract features from multiple symbolic representations of time series and train a linear classification model with logistic regression. The method has four variants with four different feature selection strategies:
+
+  * MrSQM-R: Random feature selection.
+  * MrSQM-RS: MrSQM-R with a follow-up Chi2 test to filter less important features.
+  * MrSQM-S: Pruning the all-subsequence feature space with a Chi2 bound and selecting the optimal set of top *k* subsequences.
+  * MrSQM-SR: Random sampling of the features from the output of MrSQM-S.
+
 ## Installation
 Download the repository: 
 ```
@@ -15,7 +23,23 @@ pip install .
 ```
 ## Example
 
-Example includes code and data to train and test with the Coffee dataset from the UCR Archive.
+Load data from arff files
+```
+X_train,y_train = util.load_from_arff_to_dataframe("data/Coffee/Coffee_TRAIN.arff")
+X_test,y_test = util.load_from_arff_to_dataframe("data/Coffee/Coffee_TEST.arff")
+```
+Train with MrSQM
+```
+clf = MrSQMClassifier()
+clf.fit(X_train,y_train)
+```
+
+Make predictions
+```
+predicted = clf.predict(X_test)
+```
+
+More examples can be found in the *example* directory. The full UEA and UCR Archive can be downloaded from http://www.timeseriesclassification.com/.
 
 
 This repository provides supporting code, results and instructions for reproducing the work presented in our publication (under review):

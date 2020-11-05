@@ -430,18 +430,7 @@ private:
 						}
 					}
 					if (matched)
-					{
-						// cout << "Found a matched: " << endl;
-						// cout << node->ngram << " : ";
-						// for (auto pos: node->loc){
-						// 	cout << pos << " ";
-						// }
-						// cout << endl;
-						// cout << child->ngram << " : ";
-						// for (auto pos: child->loc){
-						// 	cout << pos << " ";
-						// }
-						// cout << endl;
+					{						
 						child->foot_print_covered = true; // flag the child with the same fingerprint so it won't be selected later
 					}
 				}

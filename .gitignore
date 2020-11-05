@@ -7,6 +7,8 @@ __pycache__/
 *.so
 *.c
 *mrsqm_wrapper.cpp
+*sfa.train
+*sfa.test
 
 # Distribution / packaging
 .Python
