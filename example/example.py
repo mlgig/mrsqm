@@ -42,7 +42,8 @@ def mrsqm_with_sfa():
     X_test,y_test = util.load_from_arff_to_dataframe("data/Coffee/Coffee_TEST.arff")
 
     # SFA transform
-    itrain = "data/Coffee/Coffee_TRAIN.txt"
+    # since the sfa python implementation is significantly slow, we opt for the java version https://github.com/patrickzib/SFA
+    itrain = "data/Coffee/Coffee_TRAIN.txt" # txt and arff data are identical, however, the sfa java implementation can only read txt
     itest = "data/Coffee/Coffee_TEST.txt"
     otrain = 'sfa.train'
     otest = 'sfa.test'
@@ -64,4 +65,4 @@ def mrsqm_with_sfa():
 
 if __name__ == "__main__":
     basic_example()
-    mrsqm_with_sfa()
+    # mrsqm_with_sfa() # require running jar file
