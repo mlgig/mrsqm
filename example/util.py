@@ -1,6 +1,7 @@
 import numpy as np
-#from scipy.io import arff
 import pandas as pd
+
+import subprocess
 
 
 # code taken from https://github.com/alan-turing-institute/sktime/blob/master/sktime/utils/load_data.py
@@ -91,26 +92,5 @@ def load_from_arff_to_dataframe(
 
     return x_data
 
-def read_reps_from_file(inputf):
-    last_cfg = None
-    mr_seqs = []
-    rep = []
-    i = 0
-    for l in open(inputf,"r"):
-        i += 1
-        l_splitted = bytes(l,'utf-8').split(b" ")
-        cfg = l_splitted[0]
-        seq = b" ".join(l_splitted[2:])
-        if cfg == last_cfg:
-            rep.append(seq)
-        else:
-            last_cfg = cfg
-            if rep:
-                mr_seqs.append(rep)
-            rep = [seq]
-    if rep:
-        mr_seqs.append(rep)    
-    return mr_seqs
-
-
-
+def sfa_transform(itrain, itest, otrain, otest):
+    subprocess.call(['java', '-jar', 'TestSFA-all.jar', itrain, itest, otrain, otest])
