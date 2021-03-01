@@ -10,6 +10,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import chi2
 
+from sktime.utils.data_processing import from_nested_to_2d_array
+
 import logging
 
 def debug_logging(message):
@@ -57,7 +59,31 @@ cdef class PySAX:
 
 ###########################################################################
 
+cdef extern from "sfa/SFAWrapper.cpp":
+    cdef cppclass SFAWrapper:
+        SFAWrapper(int, int, int, bool)        
+        void fit(vector[vector[double]], vector[double])
+        vector[string] transform(vector[vector[double]], vector[double])
+    cdef void printHello()
 
+cdef class PySFA:
+    '''
+    Wrapper of SFA C++ implementation.
+    '''
+    cdef SFAWrapper * thisptr      # hold a C++ instance which we're wrapping
+
+    def __cinit__(self, int N, int w, int a, bool norm):
+        self.thisptr = new SFAWrapper(N, w, a, norm)
+
+    def __dealloc__(self):
+        del self.thisptr
+
+    def fit(self, X, y):
+        self.thisptr.fit(X, y)
+        return self
+
+    def transform(self, X, y):
+        return self.thisptr.transform(X,y)
 
 
 
@@ -122,9 +148,10 @@ class MrSQMClassifier:
 
     '''
 
-    def __init__(self, strat = 'SR', features_per_rep = 1000, selection_per_rep = 2000, use_sax = True, custom_config=None, xrep = 4):
+    def __init__(self, strat = 'SR', features_per_rep = 1000, selection_per_rep = 2000, use_sax = True, use_sfa = False, custom_config=None, xrep = 4):
 
         self.use_sax = use_sax
+        self.use_sfa = use_sfa
 
         if custom_config is None:
             self.config = [] # http://effbot.org/zone/default-values.htm
@@ -156,7 +183,7 @@ class MrSQMClassifier:
         if random_sampling:    
             debug_logging("Sampling window size, word length, and alphabet size.")       
             ws_choices = [int(2**(w/self.xrep)) for w in range(3*self.xrep,self.xrep*int(np.log2(max_ws))+ 1)]            
-            wl_choices = [6,8,10,12,14,16]
+            wl_choices = [6,7,8,9,10,11,12,13,14]
             alphabet_choices = [3,4,5,6]
             for w in range(3*self.xrep,self.xrep*int(np.log2(max_ws))+ 1):
                 pars.append([np.random.choice(ws_choices) , np.random.choice(wl_choices), np.random.choice(alphabet_choices)])
@@ -171,10 +198,13 @@ class MrSQMClassifier:
             
             
 
-    def transform_time_series(self, ts_x):
+    def transform_time_series(self, ts_x, y):
         debug_logging("Transform time series to symbolic representations.")
         
         multi_tssr = []   
+
+        ts_x_array = from_nested_to_2d_array(ts_x).values
+        
      
         if not self.config:
             self.config = []
@@ -184,16 +214,21 @@ class MrSQMClassifier:
             for a in ts_x.iloc[:, 0]:
                 min_len = min(min_len, len(a)) 
                 max_len = max(max_len, len(a))
-            max_ws = (min_len + max_len)//2
-
-            pars = self.create_pars(min_ws, max_ws, True)
+            max_ws = (min_len + max_len)//2            
             
             if self.use_sax:
+                pars = self.create_pars(min_ws, max_ws, True)
                 for p in pars:
                     self.config.append(
                         {'method': 'sax', 'window': p[0], 'word': p[1], 'alphabet': p[2], 
                         # 'dilation': np.int32(2 ** np.random.uniform(0, np.log2((min_len - 1) / (p[0] - 1))))})
-                        'dilation': 1})            
+                        'dilation': 1})
+            if self.use_sfa:
+                pars = self.create_pars(min_ws, max_ws, True)
+                for p in pars:
+                    self.config.append(
+                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2]                    
+                        })        
 
         
         for cfg in self.config:
@@ -204,8 +239,12 @@ class MrSQMClassifier:
                     ps = PySAX(cfg['window'], cfg['word'], cfg['alphabet'], cfg['dilation'])
                     for ts in ts_x.iloc[:,i]:
                         sr = ps.timeseries2SAXseq(ts)
-                        tssr.append(sr)             
-
+                        tssr.append(sr)
+                elif  cfg['method'] == 'sfa':
+                    if 'signature' not in cfg:
+                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], True).fit(ts_x_array,y)
+                    
+                    tssr = cfg['signature'].transform(ts_x_array,y)
                 multi_tssr.append(tssr)        
 
         return multi_tssr
@@ -220,7 +259,8 @@ class MrSQMClassifier:
         for i in range(0, max_n_seq):
             did = randint(0,n_input)
             wid = randint(0,len(splitted_seqs[did]))
-            word = splitted_seqs[did][wid]        
+            word = splitted_seqs[did][wid]
+            
             s_length = randint(min_length, min(len(word) + 1, max_length + 1))
             start = randint(0,len(word) - s_length + 1)        
             sampled = word[start:(start + s_length)]
@@ -333,7 +373,7 @@ class MrSQMClassifier:
         mr_seqs = []
 
         if X is not None:
-            mr_seqs = self.transform_time_series(X)
+            mr_seqs = self.transform_time_series(X,y)
         if ext_rep is not None:
             mr_seqs.extend(self.read_reps_from_file(ext_rep))
         
@@ -357,7 +397,8 @@ class MrSQMClassifier:
     def transform_test_X(self, X, ext_rep = None):
         mr_seqs = []
         if X is not None:
-            mr_seqs = self.transform_time_series(X)
+            y = np.random.choice([-1.0,1.0], X.shape[0])
+            mr_seqs = self.transform_time_series(X,y)
         if ext_rep is not None:
             mr_seqs.extend(self.read_reps_from_file(ext_rep))
 

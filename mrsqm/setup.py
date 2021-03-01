@@ -11,10 +11,14 @@ setup(
     version = "0.0.1",
     #packages = ["mrsqm"],
     ext_modules = cythonize(Extension(
-           name="mrsqm",                                # the extension name
-           sources=["mrsqm_wrapper.pyx"], # the Cython source and
+            name="mrsqm",                                # the extension name
+            sources=["mrsqm_wrapper.pyx","sfa/MFT.cpp","sfa/DFT.cpp","sfa/SFA.cpp","sfa/TimeSeries.cpp"], # the Cython source and
                                                   # additional C++ source files
-           language="c++",                        # generate and compile C++ code
+            #sources=["mrsqm_wrapper.pyx"],
+            extra_compile_args=["-Wall", "-Ofast", "-g", "-std=c++11", "-mfpmath=both", "-ffast-math"],
+            extra_link_args=["-lfftw3", "-lm", "-L/opt/local/lib"],           
+            language="c++",                        # generate and compile C++ code
+
       )))
 
 
