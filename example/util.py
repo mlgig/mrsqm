@@ -86,11 +86,12 @@ def load_from_arff_to_dataframe(
 
     if has_class_labels:
         if return_separate_X_and_y:
-            return x_data, np.asarray(class_val_list)
+            numeric_class_val_list = [float(l) for l in class_val_list]    
+            return x_data, np.asarray(numeric_class_val_list)
         else:
             x_data["class_vals"] = pd.Series(class_val_list)
 
     return x_data
 
-def sfa_transform(itrain, itest, otrain, otest):
-    subprocess.call(['java', '-jar', 'TestSFA-all.jar', itrain, itest, otrain, otest])
+# def sfa_transform(itrain, itest, otrain, otest):
+#     subprocess.call(['java', '-jar', 'TestSFA-all.jar', itrain, itest, otrain, otest])
