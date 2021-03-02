@@ -395,21 +395,18 @@ class MrSQMClassifier:
         self.classes_ = self.clf.classes_ # shouldn't matter       
     
     def transform_test_X(self, X, ext_rep = None):
-        mr_seqs = []
-        if X is not None:
-            y = np.random.choice([-1.0,1.0], X.shape[0])
-            mr_seqs = self.transform_time_series(X,y)
-        if ext_rep is not None:
-            mr_seqs.extend(self.read_reps_from_file(ext_rep))
+        mr_seqs = []        
+        y = np.random.choice([-1.0,1.0], X.shape[0])
+        mr_seqs = self.transform_time_series(X,y)        
 
         return self.feature_selection_on_test(mr_seqs)
 
-    def predict_proba(self, X, ext_rep = None):        
-        test_x = self.transform_test_X(X, ext_rep)
+    def predict_proba(self, X):        
+        test_x = self.transform_test_X(X)
         return self.clf.predict_proba(test_x) 
 
-    def predict(self, X, ext_rep = None):
-        test_x = self.transform_test_X(X, ext_rep)
+    def predict(self, X):
+        test_x = self.transform_test_X(X)
         return self.clf.predict(test_x)
 
 
