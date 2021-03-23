@@ -28,12 +28,12 @@ private:
     bool normMean;
     SFA *sfa;
 
-    std::vector<std::shared_ptr<TimeSeries>> toTimeSeriesData(std::vector<std::vector<double>> &X, std::vector<double> &y)
+    std::vector<std::shared_ptr<TimeSeries>> toTimeSeriesData(std::vector<std::vector<double>> &X)
     {
         std::vector<std::shared_ptr<TimeSeries>> samples;
-        for (int i = 0; i < y.size(); i++)
+        for (int i = 0; i < X.size(); i++)
         {
-            std::shared_ptr<TimeSeries> ts = std::make_shared<TimeSeries>(X[i], y[i]);
+            std::shared_ptr<TimeSeries> ts = std::make_shared<TimeSeries>(X[i], 0); // fake label as it's not important
             ts->norm(true);
             samples.emplace_back(ts);
         }
@@ -59,9 +59,9 @@ public:
         this->maxSymbols = alphabet_size;
         this->normMean = normalization;
     }
-    void fit(std::vector<std::vector<double>> &X, std::vector<double> &y)
+    void fit(std::vector<std::vector<double>> &X)
     {
-        std::vector<std::shared_ptr<TimeSeries>> samples = toTimeSeriesData(X, y);
+        std::vector<std::shared_ptr<TimeSeries>> samples = toTimeSeriesData(X);
 
         sfa = new SFA(SFA::EQUI_DEPTH, windowSize, maxFeatures, maxSymbols, normMean);
 
@@ -81,9 +81,9 @@ public:
         sfa->divideHistogram(windows, 0);
     }
 
-    std::vector<std::string> transform(std::vector<std::vector<double>> &X, std::vector<double> &y)
+    std::vector<std::string> transform(std::vector<std::vector<double>> &X)
     {
-        std::vector<std::shared_ptr<TimeSeries>> samples = toTimeSeriesData(X, y);
+        std::vector<std::shared_ptr<TimeSeries>> samples = toTimeSeriesData(X);
         std::vector<std::string> seqs;
         MFT fft(windowSize, normMean, sfa);
 

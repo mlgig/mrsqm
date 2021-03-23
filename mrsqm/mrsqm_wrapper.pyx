@@ -62,8 +62,8 @@ cdef class PySAX:
 cdef extern from "sfa/SFAWrapper.cpp":
     cdef cppclass SFAWrapper:
         SFAWrapper(int, int, int, bool)        
-        void fit(vector[vector[double]], vector[double])
-        vector[string] transform(vector[vector[double]], vector[double])
+        void fit(vector[vector[double]])
+        vector[string] transform(vector[vector[double]])
     cdef void printHello()
 
 cdef class PySFA:
@@ -78,12 +78,12 @@ cdef class PySFA:
     def __dealloc__(self):
         del self.thisptr
 
-    def fit(self, X, y):
-        self.thisptr.fit(X, y)
+    def fit(self, X):
+        self.thisptr.fit(X)
         return self
 
-    def transform(self, X, y):
-        return self.thisptr.transform(X,y)
+    def transform(self, X):
+        return self.thisptr.transform(X)
 
 
 
@@ -198,7 +198,7 @@ class MrSQMClassifier:
             
             
 
-    def transform_time_series(self, ts_x, y):
+    def transform_time_series(self, ts_x):
         debug_logging("Transform time series to symbolic representations.")
         
         multi_tssr = []   
@@ -242,9 +242,9 @@ class MrSQMClassifier:
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':
                     if 'signature' not in cfg:
-                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], True).fit(ts_x_array,y)
+                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], True).fit(ts_x_array)
                     
-                    tssr = cfg['signature'].transform(ts_x_array,y)
+                    tssr = cfg['signature'].transform(ts_x_array)
                 multi_tssr.append(tssr)        
 
         return multi_tssr
@@ -361,7 +361,7 @@ class MrSQMClassifier:
 
 
 
-    def fit(self, X, y, ext_rep = None):
+    def fit(self, X, y):
         debug_logging("Fit training data.")
         self.classes_ = np.unique(y) #because sklearn also uses np.unique
 
@@ -369,13 +369,9 @@ class MrSQMClassifier:
 
         self.sequences = []
 
-        debug_logging("Search for subsequences.")
-        mr_seqs = []
-
-        if X is not None:
-            mr_seqs = self.transform_time_series(X,y)
-        if ext_rep is not None:
-            mr_seqs.extend(self.read_reps_from_file(ext_rep))
+        debug_logging("Search for subsequences.")        
+        mr_seqs = self.transform_time_series(X)
+        
         
         
         for rep in mr_seqs:
@@ -392,21 +388,17 @@ class MrSQMClassifier:
         
         debug_logging("Fit logistic regression model.")
         self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)        
-        self.classes_ = self.clf.classes_ # shouldn't matter       
-    
-    def transform_test_X(self, X, ext_rep = None):
-        mr_seqs = []        
-        y = np.random.choice([-1.0,1.0], X.shape[0])
-        mr_seqs = self.transform_time_series(X,y)        
+        self.classes_ = self.clf.classes_ # shouldn't matter  
 
-        return self.feature_selection_on_test(mr_seqs)
 
-    def predict_proba(self, X):        
-        test_x = self.transform_test_X(X)
+    def predict_proba(self, X): 
+        mr_seqs = self.transform_time_series(X)       
+        test_x = self.feature_selection_on_test(mr_seqs)
         return self.clf.predict_proba(test_x) 
 
     def predict(self, X):
-        test_x = self.transform_test_X(X)
+        mr_seqs = self.transform_time_series(X)       
+        test_x = self.feature_selection_on_test(mr_seqs)
         return self.clf.predict(test_x)
 
 
