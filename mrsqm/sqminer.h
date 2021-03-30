@@ -574,38 +574,14 @@ public:
 				}
 			}
 		}
-		// cout << "Nodes: " << node_count << endl;
-		// cout << "Number of candidates: " << store.size() << endl;
-		//store.print();
-
-		// select a certain top features
-		// TODO: need a smarted selection method
-		//int selected = (int)sorted_features.size() * 0.03;
-
-		// add new features to feature matrix with default value 0
-		for (int i = 0; i < ft_matrix.size(); i++)
-		{
-			ft_matrix[i].resize(number_of_ft + store.size());
-			fill(ft_matrix[i].begin() + number_of_ft, ft_matrix[i].end(), 0);
-		}
-		// update feature vector
+		
 		for (int i = 0; i < store.size(); i++)
 		{
-			store.get_node(i)->external_index = i;
-			// for (auto pos : store.get_node(i)->loc)
-			// {
-			// 	if (pos < 0)
-			// 	{
-			// 		ft_matrix[-pos - 1][number_of_ft + i] = 1;
-			// 	}
-			// }
-			//cout << "Feature: " << sorted_features[i].first << " " << sorted_features[i].second << endl;
+			//store.get_node(i)->external_index = i;			
 			output.push_back(store.get_node(i)->ngram);
-			//cout << store.get_node(i)->ngram << " : " << store.get_node(i)->chi_square << endl;
-			//cout << i << " " << store.get_node(i)->external_index << " " << store.get_node(i)->selected << endl;
+			
 		}
-
-		number_of_ft += store.size();
+		//number_of_ft += store.size();
 
 		//root->print_r();
 		delete root;
