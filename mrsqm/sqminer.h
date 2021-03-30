@@ -545,18 +545,9 @@ public:
 	{
 
 		vector<string> output;
-		ymgr = new LabelManager(y);
+		ymgr = new LabelManager(y);		
 
-		if (ft_matrix.empty())
-		{
-			for (int i = 0; i < sequences.size(); i++)
-			{
-				ft_matrix.push_back(vector<int>());
-			}
-			ft_matrix.shrink_to_fit();
-		}
-
-		set<ENode *> best_features;
+		
 		int node_count = 0;
 
 		root = prepare_inverted_index(sequences, y);
@@ -601,13 +592,13 @@ public:
 		for (int i = 0; i < store.size(); i++)
 		{
 			store.get_node(i)->external_index = i;
-			for (auto pos : store.get_node(i)->loc)
-			{
-				if (pos < 0)
-				{
-					ft_matrix[-pos - 1][number_of_ft + i] = 1;
-				}
-			}
+			// for (auto pos : store.get_node(i)->loc)
+			// {
+			// 	if (pos < 0)
+			// 	{
+			// 		ft_matrix[-pos - 1][number_of_ft + i] = 1;
+			// 	}
+			// }
 			//cout << "Feature: " << sorted_features[i].first << " " << sorted_features[i].second << endl;
 			output.push_back(store.get_node(i)->ngram);
 			//cout << store.get_node(i)->ngram << " : " << store.get_node(i)->chi_square << endl;
