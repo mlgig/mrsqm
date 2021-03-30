@@ -7,8 +7,7 @@ import pandas as pd
 from numpy.random import randint
 from sklearn.linear_model import LogisticRegression
 
-from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import chi2
+from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
 
 from sktime.utils.data_processing import from_nested_to_2d_array
 
@@ -291,7 +290,8 @@ class MrSQMClassifier:
 
         full_fm = np.hstack(full_fm)
 
-        return full_fm
+        self.final_vt = VarianceThreshold()
+        return self.final_vt.fit_transform(full_fm)
 
     def feature_selection_on_test(self, mr_seqs):
         debug_logging("Compute test data in subsequence space.")
@@ -311,8 +311,7 @@ class MrSQMClassifier:
 
 
         full_fm = np.hstack(full_fm)
-
-        return full_fm
+        return self.final_vt.transform(full_fm)
 
     def read_reps_from_file(self, inputf):
         last_cfg = None
