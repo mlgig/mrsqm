@@ -177,12 +177,14 @@ class MrSQMClassifier:
         
      
 
-    def create_pars(self, min_ws, max_ws, random_sampling=False):
+    def create_pars(self, min_ws, max_ws, random_sampling=False, is_sfa=False):
         pars = []            
         if random_sampling:    
             debug_logging("Sampling window size, word length, and alphabet size.")       
             ws_choices = [int(2**(w/self.xrep)) for w in range(3*self.xrep,self.xrep*int(np.log2(max_ws))+ 1)]            
-            wl_choices = [6,7,8,9,10,11,12,13,14]
+            wl_choices = [6,8,10,12,14,16]
+            if is_sfa:
+                wl_choices = [6,8,10,12,14] # can't handle 16x6 case
             alphabet_choices = [3,4,5,6]
             for w in range(3*self.xrep,self.xrep*int(np.log2(max_ws))+ 1):
                 pars.append([np.random.choice(ws_choices) , np.random.choice(wl_choices), np.random.choice(alphabet_choices)])
@@ -216,14 +218,14 @@ class MrSQMClassifier:
             max_ws = (min_len + max_len)//2            
             
             if self.use_sax:
-                pars = self.create_pars(min_ws, max_ws, True)
+                pars = self.create_pars(min_ws, max_ws, random_sampling=True, is_sfa=False)
                 for p in pars:
                     self.config.append(
                         {'method': 'sax', 'window': p[0], 'word': p[1], 'alphabet': p[2], 
                         # 'dilation': np.int32(2 ** np.random.uniform(0, np.log2((min_len - 1) / (p[0] - 1))))})
                         'dilation': 1})
             if self.use_sfa:
-                pars = self.create_pars(min_ws, max_ws, True)
+                pars = self.create_pars(min_ws, max_ws, random_sampling=True, is_sfa=True)
                 for p in pars:
                     self.config.append(
                         {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2]                    
@@ -290,8 +292,9 @@ class MrSQMClassifier:
 
         full_fm = np.hstack(full_fm)
 
-        self.final_vt = VarianceThreshold()
-        return self.final_vt.fit_transform(full_fm)
+        #self.final_vt = VarianceThreshold()
+        #return self.final_vt.fit_transform(full_fm)
+        return full_fm
 
     def feature_selection_on_test(self, mr_seqs):
         debug_logging("Compute test data in subsequence space.")
@@ -311,7 +314,8 @@ class MrSQMClassifier:
 
 
         full_fm = np.hstack(full_fm)
-        return self.final_vt.transform(full_fm)
+        #return self.final_vt.transform(full_fm)
+        return full_fm
 
     def read_reps_from_file(self, inputf):
         last_cfg = None
