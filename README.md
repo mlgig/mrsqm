@@ -54,3 +54,7 @@ More examples can be found in the *example* directory. The full UEA and UCR Arch
 This repository provides supporting code, results and instructions for reproducing the work presented in our publication (under review):
 
 "MrSQM: Fast Time Series Classification with Symbolic Representations", Thach Le Nguyen, Georgiana Ifrim, https://arxiv.org/abs/2109.01036
+
+MrSQM was also used for a time series regression task in a data challenge competition here: 
+https://github.com/mlgig/vistamilk-spectroscopy-challenge
+https://arxiv.org/pdf/2107.02906.pdf
