@@ -26,6 +26,7 @@ private:
     unsigned int maxFeatures; // word length
     unsigned int maxSymbols; // alphabet size
     bool normMean;
+    bool normTS;
     SFA *sfa;
 
     std::vector<std::shared_ptr<TimeSeries>> toTimeSeriesData(std::vector<std::vector<double>> &X)
@@ -34,7 +35,10 @@ private:
         for (int i = 0; i < X.size(); i++)
         {
             std::shared_ptr<TimeSeries> ts = std::make_shared<TimeSeries>(X[i], 0); // fake label as it's not important
-            ts->norm(true);
+            if (normTS == true) {
+                ts->norm(true);
+            }
+            
             samples.emplace_back(ts);
         }
         return samples;
@@ -52,12 +56,14 @@ private:
     }
 
 public:
-    SFAWrapper(int window_size, int word_length, int alphabet_size, bool normalization)    
+    SFAWrapper(int window_size, int word_length, int alphabet_size, bool normalization, bool normTimeSeries)    
     {
         this->windowSize = window_size;
         this->maxFeatures = word_length;
         this->maxSymbols = alphabet_size;
         this->normMean = normalization;
+        this->normTS = normTimeSeries;
+
     }
     void fit(std::vector<std::vector<double>> &X)
     {
@@ -73,7 +79,9 @@ public:
         {
             for (auto t2 : t->getDisjointSequences(windowSize, normMean))
             {
-                t2->norm();
+                if (normTS == true){
+                    t2->norm();
+                }                
                 windows.emplace_back(t2);
             }
         }

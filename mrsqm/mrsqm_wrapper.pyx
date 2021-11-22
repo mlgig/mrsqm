@@ -5,11 +5,11 @@ from libcpp.vector cimport vector
 import numpy as np
 import pandas as pd
 from numpy.random import randint
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, RidgeClassifierCV
 
 from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
 
-from sktime.utils.data_processing import from_nested_to_2d_array
+from sktime.datatypes._panel._convert import from_nested_to_2d_array
 
 import logging
 
@@ -60,7 +60,7 @@ cdef class PySAX:
 
 cdef extern from "sfa/SFAWrapper.cpp":
     cdef cppclass SFAWrapper:
-        SFAWrapper(int, int, int, bool)        
+        SFAWrapper(int, int, int, bool, bool)        
         void fit(vector[vector[double]])
         vector[string] transform(vector[vector[double]])
     cdef void printHello()
@@ -71,8 +71,8 @@ cdef class PySFA:
     '''
     cdef SFAWrapper * thisptr      # hold a C++ instance which we're wrapping
 
-    def __cinit__(self, int N, int w, int a, bool norm):
-        self.thisptr = new SFAWrapper(N, w, a, norm)
+    def __cinit__(self, int N, int w, int a, bool norm, bool normTS):
+        self.thisptr = new SFAWrapper(N, w, a, norm, normTS)
 
     def __dealloc__(self):
         del self.thisptr
@@ -147,10 +147,13 @@ class MrSQMClassifier:
 
     '''
 
-    def __init__(self, strat = 'SR', features_per_rep = 1000, selection_per_rep = 2000, use_sax = True, use_sfa = False, custom_config=None, xrep = 4):
+    def __init__(self, strat = 'SR', features_per_rep = 1000, selection_per_rep = 2000, nsax = 1, nsfa = 1, custom_config=None):
 
-        self.use_sax = use_sax
-        self.use_sfa = use_sfa
+        # self.use_sax = use_sax
+        # self.use_sfa = use_sfa
+
+        self.nsax = nsax
+        self.nsfa = nsfa
 
         if custom_config is None:
             self.config = [] # http://effbot.org/zone/default-values.htm
@@ -166,31 +169,41 @@ class MrSQMClassifier:
 
         self.fpr = features_per_rep
         self.spr = selection_per_rep
-        self.xrep = xrep  
+        
         self.filters = [] # feature filters (one filter for a rep) for test data transformation
 
         debug_logging("Initialize MrSQM Classifier.")
         debug_logging("Feature Selection Strategy: " + strat)
-        debug_logging("Mode: " + str(self.xrep))
+        debug_logging("SAX Reps: " + str(self.nsax) + "x")
+        debug_logging("SFA Reps: " + str(self.nsfa) + "x")
         debug_logging("Number of features per rep: " + str(self.fpr))
         debug_logging("Number of candidates per rep (only for SR and RS):" + str(self.spr))
         
      
 
-    def create_pars(self, min_ws, max_ws, random_sampling=False, is_sfa=False):
-        pars = []            
-        if random_sampling:    
-            debug_logging("Sampling window size, word length, and alphabet size.")       
-            ws_choices = [int(2**(w/self.xrep)) for w in range(3*self.xrep,self.xrep*int(np.log2(max_ws))+ 1)]            
-            wl_choices = [6,8,10,12,14,16]
-            if is_sfa:
-                wl_choices = [6,8,10,12,14] # can't handle 16x6 case
-            alphabet_choices = [3,4,5,6]
-            for w in range(3*self.xrep,self.xrep*int(np.log2(max_ws))+ 1):
-                pars.append([np.random.choice(ws_choices) , np.random.choice(wl_choices), np.random.choice(alphabet_choices)])
-        else:
-            debug_logging("Doubling the window while fixing word length and alphabet size.")                   
-            pars = [[int(2**(w/self.xrep)),8,4] for w in range(3*self.xrep,self.xrep*int(np.log2(max_ws))+ 1)]     
+    def create_pars(self, min_ws, max_ws, xrep, random_sampling=False, is_sfa=False):
+        pars = []      
+        if xrep > 0:      
+            if random_sampling:    
+                debug_logging("Sampling window size, word length, and alphabet size.")       
+                ws_choices = [int(2**(w/xrep)) for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]            
+                wl_choices = [6,8,10,12,14,16]
+                if is_sfa:
+                    wl_choices = [6,8,10,12,14] # can't handle 16x6 case
+                alphabet_choices = [3,4,5,6]
+
+                nrep = xrep*int(np.log2(max_ws))
+                #if not is_sfa: # reduce number of sax rep
+                #    nrep = nrep // 2       
+                    
+                #for w in range(3*self.xrep,self.xrep*int(np.log2(max_ws))+ 1):
+                for w in range(nrep):
+                    pars.append([np.random.choice(ws_choices) , np.random.choice(wl_choices), np.random.choice(alphabet_choices)])
+            else:
+                #debug_logging("Doubling the window while fixing word length and alphabet size.")                   
+                #pars = [[int(2**(w/xrep)),8,4] for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]     
+                #if not is_sfa:
+                pars = [[w,8,4] for w in range(8,max_ws,int(np.sqrt(max_ws)))]     
 
         debug_logging("Symbolic Parameters: " + str(pars))      
             
@@ -217,18 +230,18 @@ class MrSQMClassifier:
                 max_len = max(max_len, len(a))
             max_ws = (min_len + max_len)//2            
             
-            if self.use_sax:
-                pars = self.create_pars(min_ws, max_ws, random_sampling=True, is_sfa=False)
-                for p in pars:
-                    self.config.append(
+            
+            pars = self.create_pars(min_ws, max_ws, self.nsax, random_sampling=False, is_sfa=False)            
+            for p in pars:
+                self.config.append(
                         {'method': 'sax', 'window': p[0], 'word': p[1], 'alphabet': p[2], 
                         # 'dilation': np.int32(2 ** np.random.uniform(0, np.log2((min_len - 1) / (p[0] - 1))))})
                         'dilation': 1})
-            if self.use_sfa:
-                pars = self.create_pars(min_ws, max_ws, random_sampling=True, is_sfa=True)
-                for p in pars:
-                    self.config.append(
-                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2]                    
+            
+            pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=False, is_sfa=True)            
+            for p in pars:
+                self.config.append(
+                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2] , 'normSFA': False, 'normTS': True
                         })        
 
         
@@ -243,7 +256,7 @@ class MrSQMClassifier:
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':
                     if 'signature' not in cfg:
-                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], True).fit(ts_x_array)
+                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(ts_x_array)
                     
                     tssr = cfg['signature'].transform(ts_x_array)
                 multi_tssr.append(tssr)        
@@ -391,6 +404,7 @@ class MrSQMClassifier:
         
         debug_logging("Fit logistic regression model.")
         self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)        
+        # self.clf = RidgeClassifierCV(alphas = np.logspace(-3, 3, 10), normalize = True).fit(train_x, y)        
         self.classes_ = self.clf.classes_ # shouldn't matter  
 
 
