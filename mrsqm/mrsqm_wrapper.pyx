@@ -9,13 +9,96 @@ from sklearn.linear_model import LogisticRegression, RidgeClassifierCV
 
 from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
 
-from sktime.datatypes._panel._convert import from_nested_to_2d_array
+# from sktime.datatypes._panel._convert import from_nested_to_2d_array
 
 import logging
 
 def debug_logging(message):
     logging.info(message)
 
+def from_nested_to_2d_array(X, return_numpy=False):
+    """Convert nested Panel to 2D numpy Panel.
+
+    Convert nested pandas DataFrame or Series with NumPy arrays or
+    pandas Series in cells into tabular
+    pandas DataFrame with primitives in cells, i.e. a data frame with the
+    same number of rows as the input data and
+    as many columns as there are observations in the nested series. Requires
+    series to be have the same index.
+
+    Parameters
+    ----------
+    X : nested pd.DataFrame or nested pd.Series
+    return_numpy : bool, default = False
+        - If True, returns a NumPy array of the tabular data.
+        - If False, returns a pandas DataFrame with row and column names.
+
+    Returns
+    -------
+     Xt : pandas DataFrame
+        Transformed DataFrame in tabular format
+    """
+    # TODO does not handle dataframes with nested series columns *and*
+    #  standard columns containing only primitives
+
+    # convert nested data into tabular data
+    if isinstance(X, pd.Series):
+        Xt = np.array(X.tolist())
+
+    elif isinstance(X, pd.DataFrame):
+        try:
+            Xt = np.hstack([X.iloc[:, i].tolist() for i in range(X.shape[1])])
+
+        # except strange key error for specific case
+        except KeyError:
+            if (X.shape == (1, 1)) and (X.iloc[0, 0].shape == (1,)):
+                # in fact only breaks when an additional condition is met,
+                # namely that the index of the time series of a single value
+                # does not start with 0, e.g. pd.RangeIndex(9, 10) as is the
+                # case in forecasting
+                Xt = X.iloc[0, 0].values
+            else:
+                raise
+
+        if Xt.ndim != 2:
+            raise ValueError(
+                "Tabularization failed, it's possible that not "
+                "all series were of equal length"
+            )
+
+    else:
+        raise ValueError(
+            f"Expected input is pandas Series or pandas DataFrame, "
+            f"but found: {type(X)}"
+        )
+
+    if return_numpy:
+        return Xt
+
+    Xt = pd.DataFrame(Xt)
+
+    # create column names from time index
+    if X.ndim == 1:
+        time_index = (
+            X.iloc[0].index
+            if hasattr(X.iloc[0], "index")
+            else np.arange(X.iloc[0].shape[0])
+        )
+        columns = [f"{X.name}__{i}" for i in time_index]
+
+    else:
+        columns = []
+        for colname, col in X.items():
+            time_index = (
+                col.iloc[0].index
+                if hasattr(col.iloc[0], "index")
+                else np.arange(col.iloc[0].shape[0])
+            )
+            columns.extend([f"{colname}__{i}" for i in time_index])
+
+    Xt.index = X.index
+    Xt.columns = columns
+    return Xt
 
 
 
@@ -63,7 +146,7 @@ cdef extern from "sfa/SFAWrapper.cpp":
         SFAWrapper(int, int, int, bool, bool)        
         void fit(vector[vector[double]])
         vector[string] transform(vector[vector[double]])
-    cdef void printHello()
+    # cdef void printHello()
 
 cdef class PySFA:
     '''
@@ -147,13 +230,18 @@ class MrSQMClassifier:
 
     '''
 
-    def __init__(self, strat = 'SR', features_per_rep = 1000, selection_per_rep = 2000, nsax = 1, nsfa = 1, custom_config=None):
-
-        # self.use_sax = use_sax
-        # self.use_sfa = use_sfa
+    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True):
+        
 
         self.nsax = nsax
         self.nsfa = nsfa
+
+        self.sfa_norm = sfa_norm
+        if random_state is not None:
+            np.random.seed(random_state)
+        # self.random_state = (
+        #     np.int32(random_state) if isinstance(random_state, int) else None
+        # )
 
         if custom_config is None:
             self.config = [] # http://effbot.org/zone/default-values.htm
@@ -192,11 +280,7 @@ class MrSQMClassifier:
                     wl_choices = [6,8,10,12,14] # can't handle 16x6 case
                 alphabet_choices = [3,4,5,6]
 
-                nrep = xrep*int(np.log2(max_ws))
-                #if not is_sfa: # reduce number of sax rep
-                #    nrep = nrep // 2       
-                    
-                #for w in range(3*self.xrep,self.xrep*int(np.log2(max_ws))+ 1):
+                nrep = xrep*int(np.log2(max_ws))                
                 for w in range(nrep):
                     pars.append([np.random.choice(ws_choices) , np.random.choice(wl_choices), np.random.choice(alphabet_choices)])
             else:
@@ -231,17 +315,17 @@ class MrSQMClassifier:
             max_ws = (min_len + max_len)//2            
             
             
-            pars = self.create_pars(min_ws, max_ws, self.nsax, random_sampling=False, is_sfa=False)            
+            pars = self.create_pars(min_ws, max_ws, self.nsax, random_sampling=True, is_sfa=False)            
             for p in pars:
                 self.config.append(
                         {'method': 'sax', 'window': p[0], 'word': p[1], 'alphabet': p[2], 
                         # 'dilation': np.int32(2 ** np.random.uniform(0, np.log2((min_len - 1) / (p[0] - 1))))})
                         'dilation': 1})
             
-            pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=False, is_sfa=True)            
+            pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=True, is_sfa=True)            
             for p in pars:
                 self.config.append(
-                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2] , 'normSFA': False, 'normTS': True
+                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2] , 'normSFA': False, 'normTS': self.sfa_norm
                         })        
 
         
@@ -287,17 +371,24 @@ class MrSQMClassifier:
         full_fm = []
         self.filters = []
 
-        for rep, seq_features in zip(mr_seqs, self.sequences):            
+        for i in range(0,len(mr_seqs)):
+        #for rep, seq_features in zip(mr_seqs, self.sequences):            
+            rep = mr_seqs[i]
+            seq_features = self.sequences[i]
             fm = np.zeros((len(rep), len(seq_features)),dtype = np.int32)
             ft = PyFeatureTrie(seq_features)
-            for i,s in enumerate(rep):
-                fm[i,:] = ft.search(s)            
+            for ii,s in enumerate(rep):
+                fm[ii,:] = ft.search(s)            
             fm = fm > 0 # binary only
 
             fs = SelectKBest(chi2, k=min(self.fpr, fm.shape[1]))
             if self.strat == 'RS':
                 debug_logging("Filter subsequences of this representation with chi2 (only with RS).")
                 fm = fs.fit_transform(fm, y)
+                self.sequences[i] = [seq_features[ii] for ii in fs.get_support(indices=True)]
+
+                
+
 
             self.filters.append(fs)
             full_fm.append(fm)
@@ -321,35 +412,15 @@ class MrSQMClassifier:
                 fm[i,:] = ft.search(s)
             fm = fm > 0 # binary only
 
-            if self.strat == 'RS':
-                fm = fs.transform(fm)        
+            # if self.strat == 'RS':
+            #     fm = fs.transform(fm)        
             full_fm.append(fm)
 
 
         full_fm = np.hstack(full_fm)
         #return self.final_vt.transform(full_fm)
         return full_fm
-
-    def read_reps_from_file(self, inputf):
-        last_cfg = None
-        mr_seqs = []
-        rep = []
-        i = 0
-        for l in open(inputf,"r"):
-            i += 1
-            l_splitted = bytes(l,'utf-8').split(b" ")
-            cfg = l_splitted[0]
-            seq = b" ".join(l_splitted[2:])
-            if cfg == last_cfg:
-                rep.append(seq)
-            else:
-                last_cfg = cfg
-                if rep:
-                    mr_seqs.append(rep)
-                rep = [seq]
-        if rep:
-            mr_seqs.append(rep)    
-        return mr_seqs
+    
 
     def mine(self,rep, int_y):        
         mined_subs = []
@@ -407,6 +478,8 @@ class MrSQMClassifier:
         # self.clf = RidgeClassifierCV(alphas = np.logspace(-3, 3, 10), normalize = True).fit(train_x, y)        
         self.classes_ = self.clf.classes_ # shouldn't matter  
 
+        return self
+
 
     def predict_proba(self, X): 
         mr_seqs = self.transform_time_series(X)       
@@ -417,6 +490,29 @@ class MrSQMClassifier:
         mr_seqs = self.transform_time_series(X)       
         test_x = self.feature_selection_on_test(mr_seqs)
         return self.clf.predict(test_x)
+
+    def get_saliency_map(self, ts):        
+
+        is_multiclass = len(self.classes_) > 2
+        weighted_ts = np.zeros((len(self.classes_), len(ts)))
+
+        fi = 0
+        for cfg, features in zip(self.config, self.sequences):
+            if cfg['method'] == 'sax':
+                ps = PySAX(cfg['window'], cfg['word'], cfg['alphabet'])
+                if is_multiclass:
+                    for ci, cl in enumerate(self.classes_):
+                        weighted_ts[ci, :] += ps.map_weighted_patterns(
+                            ts, features, self.clf.coef_[ci, fi:(fi+len(features))])
+                else:
+                    weighted_ts[0, :] += ps.map_weighted_patterns(
+                        ts, features, self.clf.coef_[0, fi:(fi+len(features))])
+
+            fi += len(features)
+        if not is_multiclass:
+            weighted_ts[1, :] = -weighted_ts[0, :]
+        return weighted_ts
+        
 
 
 

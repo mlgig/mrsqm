@@ -263,7 +263,7 @@ void MFT::test() {
 
 	std::cout<<"Divide histogram"<<std::endl;
 	sfa.divideHistogram(windows, 0);
-	sfa.printHistogram();
+	// sfa.printHistogram();
 
     MFT mft(windowSize, normMean, &sfa);
     std::vector<int> words = mft.transform(ts, n);

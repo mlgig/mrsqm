@@ -10,7 +10,7 @@
 #include <limits>
 #include <iomanip>
 #include "MFT.h"
-#include <boost/lexical_cast.hpp>
+// #include <boost/lexical_cast.hpp>
 
 SFA::SFA(unsigned int histogramType, unsigned int windowSize, unsigned int coefficients, unsigned int symbols, bool normMean) {
 	this->histogramType = histogramType;
@@ -37,19 +37,19 @@ void SFA::divideHistogram(std::vector< std::shared_ptr<TimeSeries> > & samples, 
 	}
 }
 
-void SFA::printHistogram() {
-	std::cout << "[";
-	for (auto element : this->lookuptable) {
-		std::cout << "-Inf\t";
-		for (double element2 : element) {
-			std::cout << ","
-					<< (element2 != INFINITY? boost::lexical_cast<std::string>(element2) : "Inf")
-					<< "\t";
-		}
-		std::cout << ";" << std::endl;
-	}
-	std::cout << "]" << std::endl;
-}
+// void SFA::printHistogram() {
+// 	std::cout << "[";
+// 	for (auto element : this->lookuptable) {
+// 		std::cout << "-Inf\t";
+// 		for (double element2 : element) {
+// 			std::cout << ","
+// 					<< (element2 != INFINITY? boost::lexical_cast<std::string>(element2) : "Inf")
+// 					<< "\t";
+// 		}
+// 		std::cout << ";" << std::endl;
+// 	}
+// 	std::cout << "]" << std::endl;
+// }
 
 void SFA::createHistogram(std::vector< std::shared_ptr<TimeSeries> > & samples, int from) {
 
@@ -170,6 +170,6 @@ void SFA::test() {
 	}
 
 	sfa.divideHistogram(windows, 0);
-	sfa.printHistogram();
+	// sfa.printHistogram();
 }
 

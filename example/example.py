@@ -18,7 +18,7 @@ def basic_example():
     print("MrSQM-R accuracy: " + str(metrics.accuracy_score(y_test, predicted)))
 
     # train MrSQM-RS with SAX only
-    clf = MrSQMClassifier(strat = 'RS') # default 
+    clf = MrSQMClassifier(strat = 'RS') # default
     clf.fit(X_train,y_train)
     predicted = clf.predict(X_test)
     print("MrSQM-RS accuracy: " + str(metrics.accuracy_score(y_test, predicted)))
@@ -35,26 +35,26 @@ def basic_example():
     predicted = clf.predict(X_test)
     print("MrSQM-SR accuracy: " + str(metrics.accuracy_score(y_test, predicted)))
 
-    
+
 
 def mrsqm_with_sfa():
     X_train,y_train = util.load_from_arff_to_dataframe("data/Coffee/Coffee_TRAIN.arff")
     X_test,y_test = util.load_from_arff_to_dataframe("data/Coffee/Coffee_TEST.arff")
 
-   
+
 
     # train MrSQM-RS with SFA only
-    clf = MrSQMClassifier(use_sax = False, use_sfa = True) # train MrSQM-RS
+    clf = MrSQMClassifier(nsax = 0, nsfa = 5) # train MrSQM-RS
     clf.fit(X_train,y_train) # use ext_rep to add sfa transform
-    predicted = clf.predict(X_test) # use ext_rep to add sfa transform    
+    predicted = clf.predict(X_test) # use ext_rep to add sfa transform
     print("MrSQM-RS with SFA only accuracy: " + str(metrics.accuracy_score(y_test, predicted)))
 
     # train MrSQM-RS with both SAX and SFA
-    clf = MrSQMClassifier(use_sax = True, use_sfa = True) # train MrSQM-RS
+    clf = MrSQMClassifier(nsax = 5, nsfa = 5) # train MrSQM-RS
     clf.fit(X_train,y_train) # use ext_rep to add sfa transform
-    predicted = clf.predict(X_test) # use ext_rep to add sfa transform    
+    predicted = clf.predict(X_test) # use ext_rep to add sfa transform
     print("MrSQM-RS with both SAX and SFA accuracy: " + str(metrics.accuracy_score(y_test, predicted)))
 
 if __name__ == "__main__":
-    # basic_example()
+    basic_example()
     mrsqm_with_sfa() # require running jar file

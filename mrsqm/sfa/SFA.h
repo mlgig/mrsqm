@@ -39,7 +39,7 @@ public:
 	virtual ~SFA();
 
 	void divideHistogram(std::vector< std::shared_ptr<TimeSeries> > & samples, int from);
-	void printHistogram();
+	// void printHistogram();
 	void lookup(TimeSeries & signature, unsigned short* word);
 	void lookup(double* data, unsigned int dataSize, unsigned short* word);
 

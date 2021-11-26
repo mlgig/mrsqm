@@ -1,16 +1,45 @@
 import numpy as np
 import pandas as pd
 
-import subprocess
+
 
 
 # code taken from https://github.com/alan-turing-institute/sktime/blob/master/sktime/utils/load_data.py
 def load_from_arff_to_dataframe(
+
     full_file_path_and_name,
     has_class_labels=True,
     return_separate_X_and_y=True,
     replace_missing_vals_with="NaN",
 ):
+    """Load data from a .ts file into a Pandas DataFrame.
+    Parameters
+    ----------
+    full_file_path_and_name: str
+        The full pathname of the .ts file to read.
+    has_class_labels: bool
+        true then line contains separated strings and class value contains
+        list of separated strings, check for 'return_separate_X_and_y'
+        false otherwise.
+    return_separate_X_and_y: bool
+        true then X and Y values should be returned as separate Data Frames (
+        X) and a numpy array (y), false otherwise.
+        This is only relevant for data.
+    replace_missing_vals_with: str
+       The value that missing values in the text file should be replaced
+       with prior to parsing.
+    Returns
+    -------
+    DataFrame, ndarray
+        If return_separate_X_and_y then a tuple containing a DataFrame and a
+        numpy array containing the relevant time-series and corresponding
+        class values.
+    DataFrame
+        If not return_separate_X_and_y then a single DataFrame containing
+        all time-series and (if relevant) a column "class_vals" the
+        associated class values.
+    """
+
     instance_list = []
     class_val_list = []
 
@@ -18,7 +47,9 @@ def load_from_arff_to_dataframe(
     is_multi_variate = False
     is_first_case = True
 
-    with open(full_file_path_and_name, "r") as f:
+    # Parse the file
+    # print(full_file_path_and_name)
+    with open(full_file_path_and_name, "r", encoding="utf-8") as f:
         for line in f:
 
             if line.strip():
@@ -86,12 +117,8 @@ def load_from_arff_to_dataframe(
 
     if has_class_labels:
         if return_separate_X_and_y:
-            numeric_class_val_list = [float(l) for l in class_val_list]    
-            return x_data, np.asarray(numeric_class_val_list)
+            return x_data, np.asarray(class_val_list)
         else:
             x_data["class_vals"] = pd.Series(class_val_list)
 
     return x_data
-
-# def sfa_transform(itrain, itest, otrain, otest):
-#     subprocess.call(['java', '-jar', 'TestSFA-all.jar', itrain, itest, otrain, otest])
