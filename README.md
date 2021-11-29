@@ -16,6 +16,7 @@ cython >= 0.29
 numpy >= 1.18
 pandas >= 1.0.3
 scikit-learn >= 0.22
+fftw3 (http://www.fftw.org/)
 ```
 
 Download the repository: 
