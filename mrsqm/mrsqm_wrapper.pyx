@@ -9,7 +9,7 @@ from sklearn.linear_model import LogisticRegression, RidgeClassifierCV
 
 from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
 
-# from sktime.datatypes._panel._convert import from_nested_to_2d_array
+
 
 import logging
 
@@ -385,9 +385,7 @@ class MrSQMClassifier:
             if self.strat == 'RS':
                 debug_logging("Filter subsequences of this representation with chi2 (only with RS).")
                 fm = fs.fit_transform(fm, y)
-                self.sequences[i] = [seq_features[ii] for ii in fs.get_support(indices=True)]
-
-                
+                self.sequences[i] = [seq_features[ii] for ii in fs.get_support(indices=True)]               
 
 
             self.filters.append(fs)
@@ -505,12 +503,13 @@ class MrSQMClassifier:
                         weighted_ts[ci, :] += ps.map_weighted_patterns(
                             ts, features, self.clf.coef_[ci, fi:(fi+len(features))])
                 else:
-                    weighted_ts[0, :] += ps.map_weighted_patterns(
+                    # because classes_[1] is the positive class
+                    weighted_ts[1, :] += ps.map_weighted_patterns(
                         ts, features, self.clf.coef_[0, fi:(fi+len(features))])
 
             fi += len(features)
         if not is_multiclass:
-            weighted_ts[1, :] = -weighted_ts[0, :]
+            weighted_ts[0, :] = -weighted_ts[1, :]
         return weighted_ts
         
 
