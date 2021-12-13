@@ -1,6 +1,6 @@
 # MrSQM: Fast Time Series Classification with Symbolic Representations
 
-MrSQM (Multiple Representations Sequence Miner) is time series classifier. The 
+MrSQM (Multiple Representations Sequence Miner) is a time series classifier. The 
 MrSQM method can quickly extract features from multiple symbolic representations of time series and train a linear classification model with logistic regression. The method has four variants with four different feature selection strategies:
 
   * MrSQM-R: Random feature selection.
