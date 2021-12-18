@@ -212,21 +212,19 @@ cdef class PySQM:
 class MrSQMClassifier:    
     '''     
     Overview: MrSQM is an efficient time series classifier utilizing symbolic representations of time series. MrSQM implements four different feature selection strategies (R,S,RS,SR) that can quickly select subsequences from multiple symbolic representations of time series data.
-    
+    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True):
+
     Parameters
     ----------
     
-    strat               : str, feature selection strategy, either 'R','S','SR', or 'RS'. R and S are single-stage filters while RS and SR are two-stage filters.
-    
-    use_sax             : bool, whether to use the sax transformation. if False, ext_rep must be provided in the fitting and predicting stage.
-    
+    strat               : str, feature selection strategy, either 'R','S','SR', or 'RS'. R and S are single-stage filters while RS and SR are two-stage filters. By default set to 'RS'.
+    features_per_rep    : int, (maximum) number of features selected per representation. By deafault set to 500.
+    selection_per_rep   : int, (maximum) number of candidate features selected per representation. Only applied in two stages strategies (RS and SR). By deafault set to 2000.
+    nsax                : int, control the number of representations produced by sax transformation.
+    nsfa                : int, control the number of representations produced by sfa transformation.
     custom_config       : dict, customized parameters for the symbolic transformation.
-
-    features_per_rep    : int, (maximum) number of features selected per representation.
-
-    selection_per_rep   : int, (maximum) number of candidate features selected per representation. Only applied in two stages strategies (RS and SR)
-
-    xrep                : int, control the number of representations produced by sax transformation.
+    random_state        : set random seed for classifier. By default 'none'.
+    ts_norm             : time series normalisation (standardisation). By default set to 'True'.
 
     '''
 
