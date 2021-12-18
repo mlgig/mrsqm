@@ -489,6 +489,11 @@ class MrSQMClassifier:
         test_x = self.feature_selection_on_test(mr_seqs)
         return self.clf.predict(test_x)
 
+    def decision_function(self, X):
+        mr_seqs = self.transform_time_series(X)       
+        test_x = self.feature_selection_on_test(mr_seqs)
+        return self.clf.decision_function(test_x)
+
     def get_saliency_map(self, ts):        
 
         is_multiclass = len(self.classes_) > 2
