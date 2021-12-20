@@ -299,7 +299,7 @@ class MrSQMClassifier:
         
         multi_tssr = []   
 
-        ts_x_array = from_nested_to_2d_array(ts_x).values
+        
         
      
         if not self.config:
@@ -330,6 +330,7 @@ class MrSQMClassifier:
         for cfg in self.config:
             for i in range(ts_x.shape[1]):
                 tssr = []
+                ts_x_array = from_nested_to_2d_array(ts_x.iloc[:,i]).values
 
                 if cfg['method'] == 'sax':  # convert time series to SAX                    
                     ps = PySAX(cfg['window'], cfg['word'], cfg['alphabet'], cfg['dilation'])
