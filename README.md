@@ -51,7 +51,9 @@ predicted = clf.predict(X_test)
 
 ![Alt](explanation-mrsqm-example.png) 
 
-More examples can be found in the *example* directory. The full UEA and UCR Archive can be downloaded from http://www.timeseriesclassification.com/.
+More examples can be found in the *example* directory, including a [Jupyter Notebook](https://github.com/mlgig/mrsqm/blob/main/example/Time_Series_Classification_and_Explanation_with_MrSQM.ipynb) with detailed steps for training, prediction and 
+explanation.
+The full UEA and UCR Archive can be downloaded from http://www.timeseriesclassification.com/.
 
 
 This repository provides supporting code, results and instructions for reproducing the work presented in our publication (under review):
