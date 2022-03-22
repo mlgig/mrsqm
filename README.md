@@ -49,6 +49,8 @@ Make predictions
 predicted = clf.predict(X_test)
 ```
 
+![Alt](figs/saliencymap.jpg) 
+
 More examples can be found in the *example* directory. The full UEA and UCR Archive can be downloaded from http://www.timeseriesclassification.com/.
 
 
