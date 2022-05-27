@@ -60,3 +60,16 @@ This repository provides supporting code, results and instructions for reproduci
 
 "MrSQM: Fast Time Series Classification with Symbolic Representations and Efficient Sequence Mining", Thach Le Nguyen and Georgiana Ifrim
 https://arxiv.org/abs/2109.01036
+
+## Citation
+If you use this work, please cite as:
+```
+@incollection{mrsqm2022,
+  title={MrSQM: Fast Time Series Classification with Symbolic Representations and Efficient Sequence Mining},
+  author={Le Nguyen, Thach and Ifrim, Georgiana},
+  year={2022},
+  booktitle = {arxvi},
+  url = {https://arxiv.org/abs/2109.01036},
+  publisher={}
+}
+```
