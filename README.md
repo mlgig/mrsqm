@@ -59,3 +59,4 @@ The full UEA and UCR Archive can be downloaded from http://www.timeseriesclassif
 This repository provides supporting code, results and instructions for reproducing the work presented in our publication (under review):
 
 "MrSQM: Fast Time Series Classification with Symbolic Representations and Efficient Sequence Mining", Thach Le Nguyen and Georgiana Ifrim
+https://arxiv.org/abs/2109.01036
