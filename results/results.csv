@@ -35,13 +35,16 @@ FacesUCR,0.949,0.96,0.961,0.88,0.933
 FiftyWords,0.765,0.837,0.833,0.774,0.743
 Fish,0.96,0.977,0.983,0.977,1
 FordA,0.953,0.947,0.948,0.966,0.953
+FordB,0.837,0.823,0.81,0.826,0.815
 FreezerRegularTrain,0.998,1,0.997,0.98,0.997
 FreezerSmallTrain,0.999,0.967,0.951,0.956,0.991
+Fungi,0.995,1,1,0.957,0.995
 GunPoint,1,0.993,1,0.993,1
 GunPointAgeSpan,0.991,0.997,0.997,0.997,1
 GunPointMaleVersusFemale,0.987,1,0.997,0.997,1
 GunPointOldVersusYoung,0.978,1,0.994,0.987,0.994
 Ham,0.733,0.714,0.724,0.733,0.771
+HandOutlines,0.935,0.941,0.941,0.908,0.951
 Haptics,0.545,0.542,0.523,0.39,0.571
 Herring,0.594,0.656,0.703,0.609,0.688
 HouseTwenty,0.958,0.958,0.966,0.966,0.983
@@ -62,6 +65,8 @@ MiddlePhalanxTW,0.539,0.539,0.552,0.571,0.558
 MixedShapesRegularTrain,0.967,0.971,0.973,0.97,0.981
 MixedShapesSmallTrain,0.93,0.95,0.936,0.948,0.96
 MoteStrain,0.927,0.927,0.917,0.95,0.958
+NonInvasiveFetalECGThorax1,0.937,0.937,0.953,0.896,0.937
+NonInvasiveFetalECGThorax2,0.95,0.964,0.966,0.917,0.948
 OliveOil,0.9,0.933,0.9,0.9,0.967
 OSULeaf,0.95,0.959,0.942,0.963,0.983
 PhalangesOutlinesCorrect,0.81,0.837,0.833,0.777,0.81
