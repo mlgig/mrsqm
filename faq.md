@@ -19,3 +19,19 @@ remove the option , "-mfpmath=both".
 
 
 **A**: Reinstall fftw3 following this guide http://micro.stanford.edu/wiki/Install_FFTW3. 
+
+
+**Q**: Does MrSQM work on Google Colab ? 
+
+
+**A**: Yes. The following steps should be sufficient to install MrSQM on Google Colab.
+
+```
+#Install fftw3:
+!apt-get install libfftw3-dev libfftw3-doc
+
+#Clone and install mrsqm:
+!git clone https://github.com/mlgig/mrsqm.git
+%cd mrsqm/mrsqm
+!pip install .
+```
