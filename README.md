@@ -56,7 +56,10 @@ explanation.
 The full UEA and UCR Archive can be downloaded from http://www.timeseriesclassification.com/.
 
 
-This repository provides supporting code, results and instructions for reproducing the work presented in our publication (under review):
+This repository provides supporting code, results and instructions for reproducing the work presented in our publication:
+
+"Fast Time Series Classification with Random Symbolic Subsequences", Thach Le Nguyen and Georgiana Ifrim
+https://project.inria.fr/aaltd22/files/2022/08/AALTD22_paper_5778.pdf
 
 "MrSQM: Fast Time Series Classification with Symbolic Representations and Efficient Sequence Mining", Thach Le Nguyen and Georgiana Ifrim
 https://arxiv.org/abs/2109.01036
@@ -65,6 +68,14 @@ https://arxiv.org/abs/2109.01036
 If you use this work, please cite as:
 ```
 @article{mrsqm2022,
+  title={Fast Time Series Classification with Random Symbolic Subsequences},
+  author={Le Nguyen, Thach and Ifrim, Georgiana},
+  year={2022},
+  booktitle = {AALTD},
+  url = {https://project.inria.fr/aaltd22/files/2022/08/AALTD22_paper_5778.pdf},
+  publisher={Springer}
+}
+@article{mrsqm2022-extended,
   title={MrSQM: Fast Time Series Classification with Symbolic Representations and Efficient Sequence Mining},
   author={Le Nguyen, Thach and Ifrim, Georgiana},
   year={2022},
