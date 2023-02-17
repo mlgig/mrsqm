@@ -40,7 +40,7 @@ X_test,y_test = util.load_from_arff_to_dataframe("data/Coffee/Coffee_TEST.arff")
 ```
 Train with MrSQM
 ```
-clf = MrSQMClassifier()
+clf = MrSQMClassifier(nsax=0, nsfa=5)
 clf.fit(X_train,y_train)
 ```
 
