@@ -8,8 +8,8 @@ from numpy.random import randint
 from sklearn.linear_model import LogisticRegression, RidgeClassifierCV
 
 from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
-
-
+from weasel.transformations.panel.dictionary_based._sfa_dilation import _dilation
+from sktime.utils.validation.panel import check_X
 
 import logging
 
@@ -273,14 +273,21 @@ class MrSQMClassifier:
             if random_sampling:    
                 debug_logging("Sampling window size, word length, and alphabet size.")       
                 ws_choices = [int(2**(w/xrep)) for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]            
+                
                 wl_choices = [6,8,10,12,14,16]
                 if is_sfa:
                     wl_choices = [6,8,10,12,14] # can't handle 16x6 case
                 alphabet_choices = [3,4,5,6]
 
-                nrep = xrep*int(np.log2(max_ws))                
+                nrep = xrep*int(np.log2(max_ws))                                
+                
                 for w in range(nrep):
-                    pars.append([np.random.choice(ws_choices) , np.random.choice(wl_choices), np.random.choice(alphabet_choices)])
+                    window_size = np.random.choice(ws_choices)
+                    dilation = np.maximum(
+                        1,
+                        np.int32(2 ** np.random.uniform(0, np.log2((max_ws - 1) / (window_size - 1)))), # max_ws == series_length
+                    )
+                    pars.append([window_size , np.random.choice(wl_choices), np.random.choice(alphabet_choices), dilation])
             else:
                 #debug_logging("Doubling the window while fixing word length and alphabet size.")                   
                 #pars = [[int(2**(w/xrep)),8,4] for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]     
@@ -301,7 +308,8 @@ class MrSQMClassifier:
 
         ts_x_array = from_nested_to_2d_array(ts_x).values
         
-     
+        X = check_X(ts_x, enforce_univariate=True, coerce_to_numpy=True).squeeze(1)
+        
         if not self.config:
             self.config = []
             
@@ -323,24 +331,26 @@ class MrSQMClassifier:
             pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=True, is_sfa=True)            
             for p in pars:
                 self.config.append(
-                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2] , 'normSFA': False, 'normTS': self.sfa_norm
+                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2] , 'normSFA': False, 'normTS': self.sfa_norm, 'dilation': p[3]
                         })        
 
         
         for cfg in self.config:
             for i in range(ts_x.shape[1]):
                 tssr = []
-
+                
                 if cfg['method'] == 'sax':  # convert time series to SAX                    
                     ps = PySAX(cfg['window'], cfg['word'], cfg['alphabet'], cfg['dilation'])
                     for ts in ts_x.iloc[:,i]:
                         sr = ps.timeseries2SAXseq(ts)
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':
-                    if 'signature' not in cfg:
-                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(ts_x_array)
                     
-                    tssr = cfg['signature'].transform(ts_x_array)
+                    dilated_ts_x = _dilation(X,cfg['dilation'],False)[0]
+                    if 'signature' not in cfg:
+                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(dilated_ts_x)
+                    
+                    tssr = cfg['signature'].transform(dilated_ts_x)
                 multi_tssr.append(tssr)        
 
         return multi_tssr
