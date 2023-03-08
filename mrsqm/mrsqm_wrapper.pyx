@@ -7,10 +7,17 @@ import pandas as pd
 from numpy.random import randint
 from sklearn.linear_model import LogisticRegression, RidgeClassifierCV
 
-from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
-from weasel.transformations.panel.dictionary_based._sfa_dilation import _dilation
+from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold, f_classif
+
+from sklearn.feature_selection import chi2, f_classif
+from sklearn.preprocessing import KBinsDiscretizer
+from sklearn.tree import DecisionTreeClassifier
+
+from weasel.transformations.panel.dictionary_based._sfa_dilation import _dilation, _binning_dft, _mft
 from sktime.utils.validation.panel import check_X
 
+import math
+import sys
 import logging
 
 def debug_logging(message):
@@ -169,6 +176,287 @@ cdef class PySFA:
 
 
 
+
+class AdaptedSFA:
+    """Adapted from SFADilation."""
+
+    def __init__(
+        self,
+        word_length=8,
+        alphabet_size=4,
+        window_size=12,
+        norm=False,
+        binning_method="equi-depth",
+        anova=False,
+        variance=False,
+        bigrams=False,
+        skip_grams=False,
+        remove_repeat_words=False,
+        lower_bounding=True,
+        save_words=False,
+        dilation=0,
+        first_difference=False,
+        feature_selection="none",
+        sections=1,
+        max_feature_count=256,
+        p_threshold=0.05,
+        random_state=None,
+        return_sparse=True,
+        return_pandas_data_series=False,
+        n_jobs=1,
+    ):
+        self.words = []
+        self.breakpoints = []
+
+        # we cannot select more than window_size many letters in a word
+        self.word_length = word_length
+
+        self.alphabet_size = alphabet_size
+        self.window_size = window_size
+
+        self.norm = norm
+        self.lower_bounding = lower_bounding
+        self.inverse_sqrt_win_size = (
+            1.0 / math.sqrt(window_size) if not lower_bounding else 1.0
+        )
+
+        self.remove_repeat_words = remove_repeat_words
+
+        self.save_words = save_words
+
+        self.binning_method = binning_method
+        self.anova = anova
+        self.variance = variance
+
+        self.bigrams = bigrams
+        self.skip_grams = skip_grams
+        self.n_jobs = n_jobs
+        self.sections = sections
+
+        self.n_instances = 0
+        self.series_length = 0
+        self.letter_bits = 0
+
+        self.dilation = dilation
+        self.first_difference = first_difference
+
+        # Feature selection part
+        self.feature_selection = feature_selection
+        self.max_feature_count = max_feature_count
+        self.feature_count = 0
+        self.relevant_features = None
+
+        # feature selection is applied based on the chi-squared test.
+        self.p_threshold = p_threshold
+
+        self.return_sparse = return_sparse
+        self.return_pandas_data_series = return_pandas_data_series
+
+        self.random_state = random_state  
+
+
+    def fit(self, X, y=None):
+        offset = 2 if self.norm else 0
+        self.word_length_actual = min(self.window_size - offset, self.word_length)
+        self.dft_length = (
+            self.window_size - offset
+            if (self.anova or self.variance) is True
+            else self.word_length_actual
+        )
+        # make dft_length an even number (same number of reals and imags)
+        self.dft_length = self.dft_length + self.dft_length % 2
+        self.word_length_actual = self.word_length_actual + self.word_length_actual % 2
+
+        self.support = np.arange(self.word_length_actual)
+        self.letter_bits = np.uint32(math.ceil(math.log2(self.alphabet_size)))
+        # self.word_bits = self.word_length_actual * self.letter_bits
+
+        X = check_X(X, enforce_univariate=True, coerce_to_numpy=True)
+        X = X.squeeze(1)
+
+        if self.dilation >= 1 or self.first_difference:
+            X2, self.X_index = _dilation(X, self.dilation, self.first_difference)
+        else:
+            X2, self.X_index = X, np.arange(X.shape[-1])
+
+        self.n_instances, self.series_length = X2.shape
+        self.breakpoints = self._binning(X2, y)
+        
+        return self
+
+    def transform(self,X):
+        X = check_X(X, enforce_univariate=True, coerce_to_numpy=True)
+        X = X.squeeze(1)
+
+        if self.dilation >= 1 or self.first_difference:
+            X2, self.X_index = _dilation(X, self.dilation, self.first_difference)
+        else:
+            X2, self.X_index = X, np.arange(X.shape[-1])
+
+        dfts = _mft(
+            X2,
+            self.window_size,
+            self.dft_length,
+            self.norm,
+            self.support,
+            self.anova,
+            self.variance,
+            self.inverse_sqrt_win_size,
+            self.lower_bounding,
+            )
+        all_seqs = []
+        
+        for seq in dfts:
+            sfa_str = b''
+            for dft in seq:
+                if sfa_str:
+                    sfa_str += b' '
+                
+                first_char = ord(b'A')
+                for i in range(self.word_length):
+                    for bp in range(self.alphabet_size):
+                        if dft[i] <= self.breakpoints[i][bp]:
+                            sfa_str += bytes([first_char + bp])
+                            break
+                    first_char += self.alphabet_size
+            all_seqs.append(sfa_str)
+        return all_seqs
+
+    def _binning(self, X, y=None):
+        dft = _binning_dft(
+            X,
+            self.window_size,
+            self.series_length,
+            self.dft_length,
+            self.norm,
+            self.inverse_sqrt_win_size,
+            self.lower_bounding,
+        )
+
+        if y is not None:
+            y = np.repeat(y, dft.shape[0] / len(y))
+
+        if self.variance and y is not None:
+            # determine variance
+            dft_variance = np.var(dft, axis=0)
+
+            # select word-length-many indices with the largest variance
+            self.support = np.argsort(-dft_variance)[: self.word_length_actual]
+
+            # sort remaining indices
+            self.support = np.sort(self.support)
+
+            # select the Fourier coefficients with highest f-score
+            dft = dft[:, self.support]
+            self.dft_length = np.max(self.support) + 1
+            self.dft_length = self.dft_length + self.dft_length % 2  # even
+
+        if self.anova and y is not None:
+            non_constant = np.where(
+                ~np.isclose(dft.var(axis=0), np.zeros_like(dft.shape[1]))
+            )[0]
+
+            # select word-length many indices with best f-score
+            if self.word_length_actual <= non_constant.size:
+                f, _ = f_classif(dft[:, non_constant], y)
+                self.support = non_constant[np.argsort(-f)][: self.word_length_actual]
+
+            # sort remaining indices
+            self.support = np.sort(self.support)
+
+            # select the Fourier coefficients with highest f-score
+            dft = dft[:, self.support]
+            self.dft_length = np.max(self.support) + 1
+            self.dft_length = self.dft_length + self.dft_length % 2  # even
+
+        if self.binning_method == "information-gain":
+            return self._igb(dft, y)
+        elif self.binning_method == "kmeans" or self.binning_method == "quantile":
+            return self._k_bins_discretizer(dft)
+        else:
+            return self._mcb(dft)
+
+    def _k_bins_discretizer(self, dft):
+        encoder = KBinsDiscretizer(
+            n_bins=self.alphabet_size, strategy=self.binning_method
+        )
+        encoder.fit(dft)
+        if encoder.bin_edges_.ndim == 1:
+            breaks = encoder.bin_edges_.reshape((-1, 1))
+        else:
+            breaks = encoder.bin_edges_
+        breakpoints = np.zeros((self.word_length_actual, self.alphabet_size))
+
+        for letter in range(self.word_length_actual):
+            for bp in range(1, len(breaks[letter]) - 1):
+                breakpoints[letter, bp - 1] = breaks[letter, bp]
+
+        breakpoints[:, self.alphabet_size - 1] = sys.float_info.max
+        return breakpoints
+
+    def _mcb(self, dft):
+        breakpoints = np.zeros((self.word_length_actual, self.alphabet_size))
+
+        dft = np.round(dft, 2)
+        for letter in range(self.word_length_actual):
+            column = np.sort(dft[:, letter])
+            bin_index = 0
+
+            # use equi-depth binning
+            if self.binning_method == "equi-depth":
+                target_bin_depth = len(dft) / self.alphabet_size
+
+                for bp in range(self.alphabet_size - 1):
+                    bin_index += target_bin_depth
+                    breakpoints[letter, bp] = column[int(bin_index)]
+
+            # use equi-width binning aka equi-frequency binning
+            elif self.binning_method == "equi-width":
+                target_bin_width = (column[-1] - column[0]) / self.alphabet_size
+
+                for bp in range(self.alphabet_size - 1):
+                    breakpoints[letter, bp] = (bp + 1) * target_bin_width + column[0]
+
+        breakpoints[:, self.alphabet_size - 1] = sys.float_info.max
+        return breakpoints
+
+    def _igb(self, dft, y):
+        breakpoints = np.zeros((self.word_length_actual, self.alphabet_size))
+        clf = DecisionTreeClassifier(
+            criterion="entropy",
+            max_depth=np.uint32(np.log2(self.alphabet_size)),
+            max_leaf_nodes=self.alphabet_size,
+            random_state=1,
+        )
+
+        for i in range(self.word_length_actual):
+            clf.fit(dft[:, i][:, None], y)
+            threshold = clf.tree_.threshold[clf.tree_.children_left != -1]
+            for bp in range(len(threshold)):
+                breakpoints[i, bp] = threshold[bp]
+            for bp in range(len(threshold), self.alphabet_size):
+                breakpoints[i, bp] = np.inf
+
+        return np.sort(breakpoints, axis=1)
+        
+    def timeseries2SFAseq(self, ts):
+        """Convert time series to SFA sequence."""
+        dfts = self.sfa._mft(ts)
+        sfa_str = b''
+        for window in range(dfts.shape[0]):
+            if sfa_str:
+                sfa_str += b' '
+            dft = dfts[window]
+            first_char = ord(b'A')
+            for i in range(self.sfa.word_length):
+                for bp in range(self.sfa.alphabet_size):
+                    if dft[i] <= self.sfa.breakpoints[i][bp]:
+                        sfa_str += bytes([first_char + bp])
+                        break
+                first_char += self.sfa.alphabet_size
+        return sfa_str
+
+
 #########################SQM wrapper#########################
 
 
@@ -228,7 +516,18 @@ class MrSQMClassifier:
 
     '''
 
-    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True):
+    def __init__(self, 
+        strat = 'RS', 
+        features_per_rep = 500, 
+        selection_per_rep = 2000, 
+        nsax = 1, 
+        nsfa = 0, 
+        custom_config=None, 
+        random_state = None, 
+        sfa_norm = True, 
+        use_dilation = False, 
+        use_first_diff = False
+        ):
         
 
         self.nsax = nsax
@@ -257,6 +556,9 @@ class MrSQMClassifier:
         self.spr = selection_per_rep
         
         self.filters = [] # feature filters (one filter for a rep) for test data transformation
+        
+        self.use_dilation = use_dilation
+        self.use_first_diff = use_first_diff
 
         debug_logging("Initialize MrSQM Classifier.")
         debug_logging("Feature Selection Strategy: " + strat)
@@ -278,6 +580,7 @@ class MrSQMClassifier:
                 if is_sfa:
                     wl_choices = [6,8,10,12,14] # can't handle 16x6 case
                 alphabet_choices = [3,4,5,6]
+                diff_choices = [True, False]
 
                 nrep = xrep*int(np.log2(max_ws))                                
                 
@@ -287,7 +590,10 @@ class MrSQMClassifier:
                         1,
                         np.int32(2 ** np.random.uniform(0, np.log2((max_ws - 1) / (window_size - 1)))), # max_ws == series_length
                     )
-                    pars.append([window_size , np.random.choice(wl_choices), np.random.choice(alphabet_choices), dilation])
+                    word_length = np.random.choice(wl_choices)
+                    if is_sfa:
+                        word_length = min(word_length,window_size)
+                    pars.append([window_size , word_length , np.random.choice(alphabet_choices), dilation, np.random.choice(diff_choices)])
             else:
                 #debug_logging("Doubling the window while fixing word length and alphabet size.")                   
                 #pars = [[int(2**(w/xrep)),8,4] for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]     
@@ -306,9 +612,9 @@ class MrSQMClassifier:
         
         multi_tssr = []   
 
-        ts_x_array = from_nested_to_2d_array(ts_x).values
+        # ts_x_array = from_nested_to_2d_array(ts_x).values
         
-        X = check_X(ts_x, enforce_univariate=True, coerce_to_numpy=True).squeeze(1)
+        # X = check_X(ts_x, enforce_univariate=True, coerce_to_numpy=True).squeeze(1)
         
         if not self.config:
             self.config = []
@@ -331,7 +637,7 @@ class MrSQMClassifier:
             pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=True, is_sfa=True)            
             for p in pars:
                 self.config.append(
-                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2] , 'normSFA': False, 'normTS': self.sfa_norm, 'dilation': p[3]
+                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2] , 'normSFA': False, 'normTS': self.sfa_norm, 'dilation': p[3], 'first_diff': p[4]
                         })        
 
         
@@ -345,12 +651,26 @@ class MrSQMClassifier:
                         sr = ps.timeseries2SAXseq(ts)
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':
+                    # print(f"Config:{cfg['window']}-{cfg['word']}-{cfg['alphabet']}")
+                    dilation = cfg['dilation']
+                    if not self.use_dilation:
+                        dilation = 0
                     
-                    dilated_ts_x = _dilation(X,cfg['dilation'],False)[0]
-                    if 'signature' not in cfg:
-                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(dilated_ts_x)
+                    first_diff = cfg['first_diff']
+                    if not self.use_first_diff:
+                        first_diff = False
+                    # dilated_ts_x = _dilation(X,cfg['dilation'],False)[0]
+                    if 'signature' not in cfg:                        
+                        # cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(dilated_ts_x)
+                        cfg['signature'] = AdaptedSFA(
+                            window_size=cfg['window'], 
+                            word_length=cfg['word'], #
+                            alphabet_size=cfg['alphabet'],
+                            dilation = dilation,
+                            first_difference = first_diff
+                            ).fit(ts_x)
                     
-                    tssr = cfg['signature'].transform(dilated_ts_x)
+                    tssr = cfg['signature'].transform(ts_x)
                 multi_tssr.append(tssr)        
 
         return multi_tssr
