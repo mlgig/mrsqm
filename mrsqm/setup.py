@@ -12,7 +12,7 @@ setup(
     #packages = ["mrsqm"],
     ext_modules = cythonize(Extension(
             name="mrsqm",                                # the extension name
-            sources=["mrsqm_wrapper.pyx","sfa/MFT.cpp","sfa/DFT.cpp","sfa/SFA.cpp","sfa/TimeSeries.cpp"], # the Cython source and
+            sources=["mrsqm_wrapper.pyx"], # the Cython source and
                                                   # additional C++ source files
             #sources=["mrsqm_wrapper.pyx"],
             extra_compile_args=["-Wall", "-Ofast", "-g", "-std=c++11",  "-ffast-math"],

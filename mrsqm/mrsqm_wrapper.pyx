@@ -13,7 +13,7 @@ from sklearn.feature_selection import chi2, f_classif
 from sklearn.preprocessing import KBinsDiscretizer
 from sklearn.tree import DecisionTreeClassifier
 
-from weasel.transformations.panel.dictionary_based._sfa_dilation import _dilation, _binning_dft, _mft
+from sfa import _dilation, _binning_dft, _mft
 from sktime.utils.validation.panel import check_X
 
 import math
@@ -147,32 +147,6 @@ cdef class PySAX:
         return self.thisptr.map_weighted_patterns(ts, sequences, weights)
 
 ###########################################################################
-
-cdef extern from "sfa/SFAWrapper.cpp":
-    cdef cppclass SFAWrapper:
-        SFAWrapper(int, int, int, bool, bool)        
-        void fit(vector[vector[double]])
-        vector[string] transform(vector[vector[double]])
-    # cdef void printHello()
-
-cdef class PySFA:
-    '''
-    Wrapper of SFA C++ implementation.
-    '''
-    cdef SFAWrapper * thisptr      # hold a C++ instance which we're wrapping
-
-    def __cinit__(self, int N, int w, int a, bool norm, bool normTS):
-        self.thisptr = new SFAWrapper(N, w, a, norm, normTS)
-
-    def __dealloc__(self):
-        del self.thisptr
-
-    def fit(self, X):
-        self.thisptr.fit(X)
-        return self
-
-    def transform(self, X):
-        return self.thisptr.transform(X)
 
 
 
