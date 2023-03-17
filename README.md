@@ -18,7 +18,11 @@ pandas >= 1.0.3
 scikit-learn >= 0.22
 fftw3 (http://www.fftw.org/)
 ```
+## Installation using pip
+pip install mrsqm
 
+
+## Installation from source
 Download the repository: 
 ```
 git clone https://github.com/mlgig/mrsqm.git
