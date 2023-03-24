@@ -298,9 +298,9 @@ class MrSQMClassifier:
         debug_logging("Transform time series to symbolic representations.")
         
         multi_tssr = []   
-
-        ts_x_array = from_nested_to_2d_array(ts_x).values
         
+        ts_x_array = from_nested_to_2d_array(ts_x).values
+        X_diff = np.diff(ts_x_array, axis=1, prepend=0)
      
         if not self.config:
             self.config = []
@@ -323,7 +323,13 @@ class MrSQMClassifier:
             pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=True, is_sfa=True)            
             for p in pars:
                 self.config.append(
-                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2] , 'normSFA': False, 'normTS': self.sfa_norm
+                        {'method': 'sfa', 
+                        'window': p[0], 
+                        'word': p[1], 
+                        'alphabet': p[2] , 
+                        'normSFA': False, 
+                        'normTS': self.sfa_norm,
+                        'diff': np.random.choice([True,False])
                         })        
 
         
@@ -337,10 +343,14 @@ class MrSQMClassifier:
                         sr = ps.timeseries2SAXseq(ts)
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':
+                    if cfg['diff']:
+                        X = ts_x_array
+                    else:
+                        X = X_diff
                     if 'signature' not in cfg:
-                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(ts_x_array)
+                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(X)
                     
-                    tssr = cfg['signature'].transform(ts_x_array)
+                    tssr = cfg['signature'].transform(X)
                 multi_tssr.append(tssr)        
 
         return multi_tssr
