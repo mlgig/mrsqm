@@ -207,6 +207,75 @@ cdef class PySQM:
         return self.thisptr.mine(sequences, labels)     
 
 
+class RPolyTransformer:
+    def __init__(self,window_size=8, mode="random"):
+        self.window_size = window_size
+        self.kernel = self.generate_kernel(0, self.window_size, 2)
+        self.mode = mode
+
+    def compute_first_diff(self,X):
+        return np.diff(X, axis=1, prepend=0)
+    def compute_second_diff(self,X):
+        return self.compute_first_diff(self.compute_first_diff(X))
+    
+    def generate_kernel(self, minTerminal, maxTerminal, maxdepth, group_prob = 0.5, depth=0):
+
+        GROUP_PROB = group_prob
+        expr = ""
+        CONST_PROB = 0.0 # it seems const doesn't help
+        UNARY_PROB = 0.0 # it seems unary doesn't help
+        COS_PROB = 0.7
+
+        if np.random.uniform() < UNARY_PROB:
+            return np.random.choice(["np.cos","np.exp"]) + "(" + f'X_w[:,{np.random.randint(minTerminal, maxTerminal)}]' + ")"
+        
+        # if depth == 0 and np.random.uniform() < COS_PROB:
+            # return np.random.choice(["np.cos","np.sin"]) + "(" + self.generate_kernel(minTerminal, maxTerminal, maxdepth, group_prob=group_prob, depth=depth + 1) + ")"
+
+        grouped = np.random.uniform()< GROUP_PROB    
+        if grouped:
+            expr += '('
+
+        if depth < maxdepth and np.random.randint(0, maxdepth) > depth:
+            expr += self.generate_kernel(minTerminal, maxTerminal, maxdepth, group_prob=group_prob, depth=depth + 1)
+        else:
+            if np.random.uniform() < CONST_PROB:
+                expr += f'{np.random.uniform()}'
+            else:
+                expr += f'X_w[:,{np.random.randint(minTerminal, maxTerminal)}]'
+
+        expr += np.random.choice([" * ", " - ", " + "])
+        # expr += np.random.choice([" * ", " - "])
+        # expr += " * "
+
+        if depth < maxdepth and np.random.randint(0, maxdepth) > depth:
+            expr += self.generate_kernel(minTerminal, maxTerminal, maxdepth, group_prob=group_prob, depth=depth + 1)
+        else:
+            if np.random.uniform() < CONST_PROB:
+                expr += f'{np.random.uniform()}'
+            else:
+                expr += f'X_w[:,{np.random.randint(minTerminal, maxTerminal)}]'
+
+        if grouped:
+            expr += ')'
+        return expr    
+    
+    def transform(self,X):
+        if self.mode == "original":
+            return X
+        if self.mode == "random":
+            ts_length = X.shape[1]
+            X_transform = np.zeros((X.shape[0],ts_length-self.window_size+1)).astype("float32")                
+            for i in range(ts_length-self.window_size+1):    
+                X_w = X[:,i:(i+self.window_size)]                
+                X_transform[:,i] = eval(self.kernel)
+            return X_transform
+        if self.mode == "firstdiff":
+            return self.compute_first_diff(X)
+        if self.mode == "seconddiff":
+            return self.compute_second_diff(X)
+
+
 ######################### MrSQM Classifier #########################
 
 class MrSQMClassifier:    
@@ -257,6 +326,7 @@ class MrSQMClassifier:
         self.spr = selection_per_rep
         
         self.filters = [] # feature filters (one filter for a rep) for test data transformation
+        self.transfomers = self.generate_transformers()
 
         debug_logging("Initialize MrSQM Classifier.")
         debug_logging("Feature Selection Strategy: " + strat)
@@ -265,7 +335,15 @@ class MrSQMClassifier:
         debug_logging("Number of features per rep: " + str(self.fpr))
         debug_logging("Number of candidates per rep (only for SR and RS):" + str(self.spr))
         
-     
+    
+    def generate_transformers(self, n=10):
+        transfomers = []
+        transfomers.append(RPolyTransformer(mode="original"))
+        transfomers.append(RPolyTransformer(mode="firstdiff"))
+        transfomers.append(RPolyTransformer(mode="seconddiff"))
+        for i in range(3,n):
+            transfomers.append(RPolyTransformer(window_size=8))
+        return transfomers
 
     def create_pars(self, min_ws, max_ws, xrep, random_sampling=False, is_sfa=False):
         pars = []      
@@ -329,7 +407,8 @@ class MrSQMClassifier:
                         'alphabet': p[2] , 
                         'normSFA': False, 
                         'normTS': self.sfa_norm,
-                        'diff': np.random.choice([True,False])
+                        'diff': np.random.choice([True,False]),
+                        'transformer': np.random.randint(low=0,high=len(self.transfomers))
                         })        
 
         
@@ -343,10 +422,7 @@ class MrSQMClassifier:
                         sr = ps.timeseries2SAXseq(ts)
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':
-                    if cfg['diff']:
-                        X = ts_x_array
-                    else:
-                        X = X_diff
+                    X = cfg['transfomer'].transform(ts_x_array)
                     if 'signature' not in cfg:
                         cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(X)
                     
