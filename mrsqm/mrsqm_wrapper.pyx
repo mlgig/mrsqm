@@ -208,15 +208,23 @@ cdef class PySQM:
 
 
 class RPolyTransformer:
-    def __init__(self,window_size=8, mode="random"):
+    def __init__(self,window_size=8, depth=2, mode="random"):
         self.window_size = window_size
-        self.kernel = self.generate_kernel(0, self.window_size, 2)
+        self.kernel = self.generate_kernel(0, self.window_size, depth)
         self.mode = mode
 
     def compute_first_diff(self,X):
         return np.diff(X, axis=1, prepend=0)
     def compute_second_diff(self,X):
         return self.compute_first_diff(self.compute_first_diff(X))
+
+    def compute_first_der(self,X):
+        Xf = np.hstack((X[:,1:],np.zeros((X.shape[0],1))))
+        Xp = np.hstack((np.zeros((X.shape[0],1)),X[:,:-1]))
+        Xd = ((X - Xp) + (Xf - Xp)/2)/2
+        Xd[:,0] = Xd[:,1]
+        Xd[:,-1] = Xd[:,-2]
+        return Xd
     
     def generate_kernel(self, minTerminal, maxTerminal, maxdepth, group_prob = 0.5, depth=0):
 
@@ -265,15 +273,26 @@ class RPolyTransformer:
             return X
         if self.mode == "random":
             ts_length = X.shape[1]
-            X_transform = np.zeros((X.shape[0],ts_length-self.window_size+1)).astype("float32")                
-            for i in range(ts_length-self.window_size+1):    
-                X_w = X[:,i:(i+self.window_size)]                
+            #print(self.kernel)
+            X_padded = np.hstack((np.zeros((X.shape[0],self.window_size//2)),X,np.zeros((X.shape[0],self.window_size//2 -1))))
+            #X_transform = np.zeros((X.shape[0],ts_length-self.window_size+1)).astype("float32")                
+            X_transform = np.zeros((X.shape[0],ts_length)).astype("float32")                
+            #for i in range(ts_length-self.window_size+1):    
+            for i in range(ts_length):    
+                X_w = X_padded[:,i:(i+self.window_size)]                
                 X_transform[:,i] = eval(self.kernel)
+                
+            
             return X_transform
         if self.mode == "firstdiff":
             return self.compute_first_diff(X)
         if self.mode == "seconddiff":
             return self.compute_second_diff(X)
+        if self.mode == "firstder":
+            return self.compute_first_der(X)
+        if self.mode == "npgrad":
+            return np.gradient(X,axis=1)
+        return None
 
 
 ######################### MrSQM Classifier #########################
@@ -326,7 +345,9 @@ class MrSQMClassifier:
         self.spr = selection_per_rep
         
         self.filters = [] # feature filters (one filter for a rep) for test data transformation
-        self.transfomers = self.generate_transformers()
+        self.transformers,self.p_transformers = self.generate_transformers()
+        
+
 
         debug_logging("Initialize MrSQM Classifier.")
         debug_logging("Feature Selection Strategy: " + strat)
@@ -336,14 +357,23 @@ class MrSQMClassifier:
         debug_logging("Number of candidates per rep (only for SR and RS):" + str(self.spr))
         
     
-    def generate_transformers(self, n=10):
-        transfomers = []
-        transfomers.append(RPolyTransformer(mode="original"))
-        transfomers.append(RPolyTransformer(mode="firstdiff"))
-        transfomers.append(RPolyTransformer(mode="seconddiff"))
-        for i in range(3,n):
-            transfomers.append(RPolyTransformer(window_size=8))
-        return transfomers
+    def generate_transformers(self, n=100):
+        transformers = []
+        p_transformers = []
+        transformers.append(RPolyTransformer(mode="original"))
+        p_transformers.append(0.4)
+        transformers.append(RPolyTransformer(mode="firstdiff"))
+        p_transformers.append(0.4)
+        #transformers.append(RPolyTransformer(mode="seconddiff"))
+        #p_transformers.append(0.2)
+        transformers.append(RPolyTransformer(mode="firstder"))
+        p_transformers.append(0.2)
+        
+        #for i in range(3,n):
+        #    transformers.append(RPolyTransformer(window_size=16,depth=3))
+        #    p_transformers.append(0.4/(n-3))
+        
+        return transformers,p_transformers
 
     def create_pars(self, min_ws, max_ws, xrep, random_sampling=False, is_sfa=False):
         pars = []      
@@ -408,7 +438,9 @@ class MrSQMClassifier:
                         'normSFA': False, 
                         'normTS': self.sfa_norm,
                         'diff': np.random.choice([True,False]),
-                        'transformer': np.random.randint(low=0,high=len(self.transfomers))
+                        #'transformer': np.random.randint(low=0,high=len(self.transformers))
+                        #'transformer': np.random.choice(self.transformers)
+                        'transformer': np.random.choice(self.transformers, p=self.p_transformers)
                         })        
 
         
@@ -422,11 +454,12 @@ class MrSQMClassifier:
                         sr = ps.timeseries2SAXseq(ts)
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':
-                    X = cfg['transfomer'].transform(ts_x_array)
+                    X = cfg['transformer'].transform(ts_x_array)
+                    #print(cfg)
                     if 'signature' not in cfg:
-                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(X)
-                    
+                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(X)                    
                     tssr = cfg['signature'].transform(X)
+                    
                 multi_tssr.append(tssr)        
 
         return multi_tssr
