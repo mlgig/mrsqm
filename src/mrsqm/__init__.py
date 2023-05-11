@@ -1,0 +1,2 @@
+# noinspection PyUnresolvedReferences
+from mrsqm.mrsqm_wrapper import MrSQMClassifier
