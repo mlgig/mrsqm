@@ -1,0 +1,5 @@
+include src/mrsqm/sfa/*.h
+include src/mrsqm/*.h
+include src/mrsqm/mrsqm_wrapper.pyx
+include src/mrsqm/sfa/SFAWrapper.cpp
+include src/mrsqm/*.cpp

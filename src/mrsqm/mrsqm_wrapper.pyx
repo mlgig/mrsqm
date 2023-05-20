@@ -206,10 +206,8 @@ cdef class PySQM:
     def mine(self, vector[string] sequences, vector[int] labels):
         return self.thisptr.mine(sequences, labels)     
 
-
-######################### MrSQM Classifier #########################
-
-class MrSQMClassifier:    
+######################### MrSQM Transformer #########################
+class MrSQMTransformer:
     '''     
     Overview: MrSQM is an efficient time series classifier utilizing symbolic representations of time series. MrSQM implements four different feature selection strategies (R,S,RS,SR) that can quickly select subsequences from multiple symbolic representations of time series data.
     def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True):
@@ -459,40 +457,44 @@ class MrSQMClassifier:
         
         for rep in mr_seqs:
             mined = self.mine(rep,int_y)
-            self.sequences.append(mined)
-
-
-    
-        # first computing the feature vectors
-        # then fit the new data to a logistic regression model
+            self.sequences.append(mined)  
         
-        debug_logging("Compute feature vectors.")
-        train_x = self.feature_selection_on_train(mr_seqs, int_y)
         
-        debug_logging("Fit logistic regression model.")
-        self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)        
-        # self.clf = RidgeClassifierCV(alphas = np.logspace(-3, 3, 10), normalize = True).fit(train_x, y)        
-        self.classes_ = self.clf.classes_ # shouldn't matter  
+        self.feature_selection_on_train(mr_seqs, int_y)       
 
         return self
+    
+    def fit_transform(self, X, y):
+        debug_logging("Fit training data.")
+        self.classes_ = np.unique(y) #because sklearn also uses np.unique
 
+        int_y = [np.where(self.classes_ == c)[0][0] for c in y]
 
-    def predict_proba(self, X): 
+        self.sequences = []
+
+        debug_logging("Search for subsequences.")        
+        mr_seqs = self.transform_time_series(X)
+        
+        
+        
+        for rep in mr_seqs:
+            mined = self.mine(rep,int_y)
+            self.sequences.append(mined)
+    
+        
+        
+        debug_logging("Compute feature vectors.")
+        train_x = self.feature_selection_on_train(mr_seqs, int_y)       
+
+        return train_x
+
+    def transform(self,X):
         mr_seqs = self.transform_time_series(X)       
-        test_x = self.feature_selection_on_test(mr_seqs)
-        return self.clf.predict_proba(test_x) 
+        X_transform = self.feature_selection_on_test(mr_seqs)
+        return X_transform
 
-    def predict(self, X):
-        mr_seqs = self.transform_time_series(X)       
-        test_x = self.feature_selection_on_test(mr_seqs)
-        return self.clf.predict(test_x)
-
-    def decision_function(self, X):
-        mr_seqs = self.transform_time_series(X)       
-        test_x = self.feature_selection_on_test(mr_seqs)
-        return self.clf.decision_function(test_x)
-
-    def get_saliency_map(self, ts):        
+    
+    def get_saliency_map(self, ts, coefs):        
 
         is_multiclass = len(self.classes_) > 2
         weighted_ts = np.zeros((len(self.classes_), len(ts)))
@@ -504,26 +506,63 @@ class MrSQMClassifier:
                 if is_multiclass:
                     for ci, cl in enumerate(self.classes_):
                         weighted_ts[ci, :] += ps.map_weighted_patterns(
-                            ts, features, self.clf.coef_[ci, fi:(fi+len(features))])
+                            ts, features, coefs[ci, fi:(fi+len(features))])
                 else:
                     # because classes_[1] is the positive class
                     weighted_ts[1, :] += ps.map_weighted_patterns(
-                        ts, features, self.clf.coef_[0, fi:(fi+len(features))])
+                        ts, features, coefs[0, fi:(fi+len(features))])
 
             fi += len(features)
         if not is_multiclass:
             weighted_ts[0, :] = -weighted_ts[1, :]
         return weighted_ts
-        
 
 
 
+######################### MrSQM Classifier #########################
+
+class MrSQMClassifier:
+    '''     
+    Overview: MrSQM is an efficient time series classifier utilizing symbolic representations of time series. MrSQM implements four different feature selection strategies (R,S,RS,SR) that can quickly select subsequences from multiple symbolic representations of time series data.
+    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True):
+
+    Parameters
+    ----------
+    
+    strat               : str, feature selection strategy, either 'R','S','SR', or 'RS'. R and S are single-stage filters while RS and SR are two-stage filters. By default set to 'RS'.
+    features_per_rep    : int, (maximum) number of features selected per representation. By deafault set to 500.
+    selection_per_rep   : int, (maximum) number of candidate features selected per representation. Only applied in two stages strategies (RS and SR). By deafault set to 2000.
+    nsax                : int, control the number of representations produced by sax transformation.
+    nsfa                : int, control the number of representations produced by sfa transformation.
+    custom_config       : dict, customized parameters for the symbolic transformation.
+    random_state        : set random seed for classifier. By default 'none'.
+    ts_norm             : time series normalisation (standardisation). By default set to 'True'.
+
+    '''
+    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True):        
+        self.transformer = MrSQMTransformer(strat = strat, features_per_rep = features_per_rep, selection_per_rep = selection_per_rep, nsax = nsax, nsfa = nsfa, custom_config = custom_config, random_state = random_state, sfa_norm = sfa_norm)
+    
+    def fit(self, X, y):
+        debug_logging("Fit training data.")        
+        train_x = self.transformer.fit_transform(X,y)
+        debug_logging("Fit logistic regression model.")
+        self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)        
+        # self.clf = RidgeClassifierCV(alphas = np.logspace(-3, 3, 10), normalize = True).fit(train_x, y)        
+        self.classes_ = self.clf.classes_ # shouldn't matter  
+
+        return self
 
 
- 
+    def predict_proba(self, X):         
+        return self.clf.predict_proba(self.transformer.transform(X)) 
 
+    def predict(self, X):        
+        return self.clf.predict(self.transformer.transform(X))
 
+    def decision_function(self, X):        
+        return self.clf.decision_function(self.transformer.transform(X))
 
+    def get_saliency_map(self, ts):
+        return self.transformer.get_saliency_map(ts,self.clf.coef_)
 
-
-
+    
