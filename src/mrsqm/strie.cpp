@@ -97,7 +97,7 @@ public:
 
         vector<FNode*> current_nodes;
         current_nodes.push_back(root);
-
+        int cur_pos = 0;
         for (char c: sequence){
             vector<FNode*> next_nodes;
             next_nodes.push_back(root);
@@ -107,15 +107,16 @@ public:
                 if (next != NULL){
                     if (next->feature_index >= 0){
                         count[next->feature_index]++;
+                        if (first_pos[next->feature_index] == -1) {
+                            first_pos[next->feature_index] = cur_pos;
+                        }
                     }
                     next_nodes.push_back(next);
                 }
             }
 
             current_nodes = next_nodes;
-
-
-
+            cur_pos++;
         }
 
         return count;
