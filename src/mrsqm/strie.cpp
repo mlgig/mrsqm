@@ -93,6 +93,7 @@ public:
 
     vector<int> search(string sequence){
         vector<int> count(num_of_features,0);
+        vector<int> first_pos(num_of_features,-1);
 
         vector<FNode*> current_nodes;
         current_nodes.push_back(root);

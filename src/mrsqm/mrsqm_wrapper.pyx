@@ -375,13 +375,13 @@ class MrSQMTransformer:
             ft = PyFeatureTrie(seq_features)
             for ii,s in enumerate(rep):
                 fm[ii,:] = ft.search(s)            
-            fm = fm > 0 # binary only
+            fm = np.hstack([fm,fm > 0]) 
 
             fs = SelectKBest(chi2, k=min(self.fpr, fm.shape[1]))
             if self.strat == 'RS':
                 debug_logging("Filter subsequences of this representation with chi2 (only with RS).")
                 fm = fs.fit_transform(fm, y)
-                self.sequences[i] = [seq_features[ii] for ii in fs.get_support(indices=True)]               
+                #self.sequences[i] = [seq_features[ii] for ii in fs.get_support(indices=True)]               
 
 
             self.filters.append(fs)
@@ -404,10 +404,10 @@ class MrSQMTransformer:
             ft = PyFeatureTrie(seq_features)
             for i,s in enumerate(rep):
                 fm[i,:] = ft.search(s)
-            fm = fm > 0 # binary only
+            fm = np.hstack([fm,fm > 0])
 
-            # if self.strat == 'RS':
-            #     fm = fs.transform(fm)        
+            if self.strat == 'RS':
+                fm = fs.transform(fm)        
             full_fm.append(fm)
 
 
