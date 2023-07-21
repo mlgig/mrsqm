@@ -65,7 +65,7 @@ public:
         this->normTS = normTimeSeries;
 
     }
-    void fit(std::vector<std::vector<double>> &X)
+    void fit(std::vector<std::vector<double>> X)
     {
         std::vector<std::shared_ptr<TimeSeries>> samples = toTimeSeriesData(X);
 
@@ -89,7 +89,7 @@ public:
         sfa->divideHistogram(windows, 0);
     }
 
-    std::vector<std::string> transform(std::vector<std::vector<double>> &X)
+    std::vector<std::string> transform(std::vector<std::vector<double>> X)
     {
         std::vector<std::shared_ptr<TimeSeries>> samples = toTimeSeriesData(X);
         std::vector<std::string> seqs;
