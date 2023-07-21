@@ -206,6 +206,95 @@ cdef class PySQM:
     def mine(self, vector[string] sequences, vector[int] labels):
         return self.thisptr.mine(sequences, labels)     
 
+
+class RPolyTransformer:
+    def __init__(self,window_size=8, depth=2, mode="random"):
+        self.window_size = window_size
+        self.kernel = self.generate_kernel(0, self.window_size, depth)
+        self.mode = mode
+
+    def compute_first_diff(self,X):
+        return np.diff(X, axis=1, prepend=0)
+    def compute_second_diff(self,X):
+        return self.compute_first_diff(self.compute_first_diff(X))
+
+    def compute_first_der(self,X):
+        Xf = np.hstack((X[:,1:],np.zeros((X.shape[0],1))))
+        Xp = np.hstack((np.zeros((X.shape[0],1)),X[:,:-1]))
+        Xd = ((X - Xp) + (Xf - Xp)/2)/2
+        Xd[:,0] = Xd[:,1]
+        Xd[:,-1] = Xd[:,-2]
+        return Xd
+    
+    def generate_kernel(self, minTerminal, maxTerminal, maxdepth, group_prob = 0.5, depth=0):
+
+        GROUP_PROB = group_prob
+        expr = ""
+        CONST_PROB = 0.0 # it seems const doesn't help
+        UNARY_PROB = 0.0 # it seems unary doesn't help
+        COS_PROB = 0.7
+
+        if np.random.uniform() < UNARY_PROB:
+            return np.random.choice(["np.cos","np.exp"]) + "(" + f'X_w[:,{np.random.randint(minTerminal, maxTerminal)}]' + ")"
+        
+        # if depth == 0 and np.random.uniform() < COS_PROB:
+            # return np.random.choice(["np.cos","np.sin"]) + "(" + self.generate_kernel(minTerminal, maxTerminal, maxdepth, group_prob=group_prob, depth=depth + 1) + ")"
+
+        grouped = np.random.uniform()< GROUP_PROB    
+        if grouped:
+            expr += '('
+
+        if depth < maxdepth and np.random.randint(0, maxdepth) > depth:
+            expr += self.generate_kernel(minTerminal, maxTerminal, maxdepth, group_prob=group_prob, depth=depth + 1)
+        else:
+            if np.random.uniform() < CONST_PROB:
+                expr += f'{np.random.uniform()}'
+            else:
+                expr += f'X_w[:,{np.random.randint(minTerminal, maxTerminal)}]'
+
+        expr += np.random.choice([" * ", " - ", " + "])
+        # expr += np.random.choice([" * ", " - "])
+        # expr += " * "
+
+        if depth < maxdepth and np.random.randint(0, maxdepth) > depth:
+            expr += self.generate_kernel(minTerminal, maxTerminal, maxdepth, group_prob=group_prob, depth=depth + 1)
+        else:
+            if np.random.uniform() < CONST_PROB:
+                expr += f'{np.random.uniform()}'
+            else:
+                expr += f'X_w[:,{np.random.randint(minTerminal, maxTerminal)}]'
+
+        if grouped:
+            expr += ')'
+        return expr    
+    
+    def transform(self,X):
+        if self.mode == "original":
+            return X
+        if self.mode == "random":
+            ts_length = X.shape[1]
+            #print(self.kernel)
+            X_padded = np.hstack((np.zeros((X.shape[0],self.window_size//2)),X,np.zeros((X.shape[0],self.window_size//2 -1))))
+            #X_transform = np.zeros((X.shape[0],ts_length-self.window_size+1)).astype("float32")                
+            X_transform = np.zeros((X.shape[0],ts_length)).astype("float32")                
+            #for i in range(ts_length-self.window_size+1):    
+            for i in range(ts_length):    
+                X_w = X_padded[:,i:(i+self.window_size)]                
+                X_transform[:,i] = eval(self.kernel)
+                
+            
+            return X_transform
+        if self.mode == "firstdiff":
+            return self.compute_first_diff(X)
+        if self.mode == "seconddiff":
+            return self.compute_second_diff(X)
+        if self.mode == "firstder":
+            return self.compute_first_der(X)
+        if self.mode == "npgrad":
+            return np.gradient(X,axis=1)
+        return None
+
+
 ######################### MrSQM Transformer #########################
 class MrSQMTransformer:
     '''     
@@ -255,6 +344,7 @@ class MrSQMTransformer:
         self.spr = selection_per_rep
         
         self.filters = [] # feature filters (one filter for a rep) for test data transformation
+        self.transformers,self.p_transformers = self.generate_transformers()
 
         debug_logging("Initialize MrSQM Classifier.")
         debug_logging("Feature Selection Strategy: " + strat)
@@ -263,7 +353,23 @@ class MrSQMTransformer:
         debug_logging("Number of features per rep: " + str(self.fpr))
         debug_logging("Number of candidates per rep (only for SR and RS):" + str(self.spr))
         
-     
+    def generate_transformers(self, n=100):
+        transformers = []
+        p_transformers = []
+        transformers.append(RPolyTransformer(mode="original"))
+        p_transformers.append(0.5)
+        transformers.append(RPolyTransformer(mode="firstdiff"))
+        p_transformers.append(0.5)
+        #transformers.append(RPolyTransformer(mode="seconddiff"))
+        #p_transformers.append(0.2)
+        #transformers.append(RPolyTransformer(mode="firstder"))
+        #p_transformers.append(0.2)
+        
+        #for i in range(3,n):
+        #    transformers.append(RPolyTransformer(window_size=16,depth=3))
+        #    p_transformers.append(0.4/(n-3))
+        
+        return transformers,p_transformers 
 
     def create_pars(self, min_ws, max_ws, xrep, random_sampling=False, is_sfa=False):
         pars = []      
@@ -296,9 +402,9 @@ class MrSQMTransformer:
         debug_logging("Transform time series to symbolic representations.")
         
         multi_tssr = []   
-
-        ts_x_array = from_nested_to_2d_array(ts_x).values
         
+        ts_x_array = from_nested_to_2d_array(ts_x).values
+        #X_diff = np.diff(ts_x_array, axis=1, prepend=0)
      
         if not self.config:
             self.config = []
@@ -321,7 +427,17 @@ class MrSQMTransformer:
             pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=True, is_sfa=True)            
             for p in pars:
                 self.config.append(
-                        {'method': 'sfa', 'window': p[0], 'word': p[1], 'alphabet': p[2] , 'normSFA': False, 'normTS': self.sfa_norm
+                        {'method': 'sfa', 
+                        'window': p[0], 
+                        'word': p[1], 
+                        'alphabet': p[2] , 
+                        'normSFA': False, 
+                        'normTS': self.sfa_norm,
+                        'diff': np.random.choice([True,False]),
+                        #'transformer': np.random.randint(low=0,high=len(self.transformers))
+                        #'transformer': np.random.choice(self.transformers)
+                        #'transformer': np.random.choice(self.transformers, p=self.p_transformers)
+                        'transformer': RPolyTransformer(mode="original")
                         })        
 
         
@@ -335,10 +451,12 @@ class MrSQMTransformer:
                         sr = ps.timeseries2SAXseq(ts)
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':
+                    X = cfg['transformer'].transform(ts_x_array)
+                    #print(cfg)
                     if 'signature' not in cfg:
-                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(ts_x_array)
+                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(X)                    
+                    tssr = cfg['signature'].transform(X)
                     
-                    tssr = cfg['signature'].transform(ts_x_array)
                 multi_tssr.append(tssr)        
 
         return multi_tssr
@@ -362,6 +480,17 @@ class MrSQMTransformer:
         
         return list(output)
 
+    def extract_features(self, rep , seq_features):
+        fm = np.zeros((len(rep), 2*len(seq_features)),dtype = np.int32)
+        ft = PyFeatureTrie(seq_features)
+        for ii,s in enumerate(rep):
+            fm[ii,:] = ft.search(s)
+        #fm = np.hstack([fm[:,:len(seq_features)],fm[:,:len(seq_features)] > 0]) # bin and freq
+        fm = fm[:,:len(seq_features)] 
+
+        return fm
+
+
     def feature_selection_on_train(self, mr_seqs, y):
         debug_logging("Compute train data in subsequence space.")
         full_fm = []
@@ -371,11 +500,7 @@ class MrSQMTransformer:
         #for rep, seq_features in zip(mr_seqs, self.sequences):            
             rep = mr_seqs[i]
             seq_features = self.sequences[i]
-            fm = np.zeros((len(rep), len(seq_features)),dtype = np.int32)
-            ft = PyFeatureTrie(seq_features)
-            for ii,s in enumerate(rep):
-                fm[ii,:] = ft.search(s)            
-            fm = np.hstack([fm,fm > 0]) 
+            fm = self.extract_features(rep, seq_features)
 
             fs = SelectKBest(chi2, k=min(self.fpr, fm.shape[1]))
             if self.strat == 'RS':
@@ -400,12 +525,7 @@ class MrSQMTransformer:
         
 
         for rep, seq_features, fs in zip(mr_seqs, self.sequences, self.filters):            
-            fm = np.zeros((len(rep), len(seq_features)),dtype = np.int32)
-            ft = PyFeatureTrie(seq_features)
-            for i,s in enumerate(rep):
-                fm[i,:] = ft.search(s)
-            fm = np.hstack([fm,fm > 0])
-
+            fm = self.extract_features(rep, seq_features)
             if self.strat == 'RS':
                 fm = fs.transform(fm)        
             full_fm.append(fm)

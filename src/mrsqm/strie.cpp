@@ -92,8 +92,8 @@ public:
     
 
     vector<int> search(string sequence){
-        vector<int> count(num_of_features,0);
-        vector<int> first_pos(num_of_features,-1);
+        vector<int> count(num_of_features*2,0);
+        // vector<int> first_pos(num_of_features,-10);
 
         vector<FNode*> current_nodes;
         current_nodes.push_back(root);
@@ -107,8 +107,8 @@ public:
                 if (next != NULL){
                     if (next->feature_index >= 0){
                         count[next->feature_index]++;
-                        if (first_pos[next->feature_index] == -1) {
-                            first_pos[next->feature_index] = cur_pos;
+                        if (count[num_of_features + next->feature_index] == 0) {
+                            count[num_of_features + next->feature_index] = cur_pos + 10;
                         }
                     }
                     next_nodes.push_back(next);
@@ -116,7 +116,9 @@ public:
             }
 
             current_nodes = next_nodes;
-            cur_pos++;
+            if (c == ' '){
+                cur_pos++;
+            }
         }
 
         return count;
