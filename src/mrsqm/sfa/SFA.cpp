@@ -142,6 +142,14 @@ void SFA::lookup(TimeSeries & signature, unsigned short* word) {
     divideByBreakPoints(signature.getData(), signature.getSize(), word);
 }
 
+std::vector< std::vector<double> > SFA::get_lookuptable() {
+	return this->lookuptable;
+}
+
+void SFA::set_lookuptable(std::vector< std::vector<double> > table) {
+	this->lookuptable = table;
+}
+
 void SFA::test() {
 
 	int size = 512;
