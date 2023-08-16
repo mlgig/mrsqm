@@ -65,7 +65,7 @@ public:
         this->normTS = normTimeSeries;
 
     }
-    void fit(std::vector<std::vector<double>> &X)
+    void fit(std::vector<std::vector<double>> X)
     {
         std::vector<std::shared_ptr<TimeSeries>> samples = toTimeSeriesData(X);
 
@@ -89,10 +89,42 @@ public:
         sfa->divideHistogram(windows, 0);
     }
 
-    std::vector<std::string> transform(std::vector<std::vector<double>> &X)
+    std::vector< std::vector<double> > get_lookuptable()
+    {
+        return sfa->get_lookuptable();
+    }
+
+
+    std::vector<std::string> transform(std::vector<std::vector<double>> X)
     {
         std::vector<std::shared_ptr<TimeSeries>> samples = toTimeSeriesData(X);
         std::vector<std::string> seqs;
+        MFT fft(windowSize, normMean, sfa);
+
+        for (auto ts : samples)
+        {
+            std::vector<std::vector<unsigned short>> words = fft.transform2Array(ts, maxFeatures);
+            std::string seq = word2string(words[0], maxSymbols);
+            
+            
+
+            for (uint i = 1; i < words.size(); i++)
+            {
+                seq += " " + word2string(words[i], maxSymbols);
+            }
+
+            seqs.emplace_back(seq);
+        }
+        return seqs;
+    }
+
+    std::vector<std::string> transform_with_lookuptable(std::vector<std::vector<double>> X, std::vector<std::vector<double>> lookuptable)
+    {
+        std::vector<std::shared_ptr<TimeSeries>> samples = toTimeSeriesData(X);
+        std::vector<std::string> seqs;
+        sfa = new SFA(SFA::EQUI_DEPTH, windowSize, maxFeatures, maxSymbols, normMean);
+        sfa->set_lookuptable(lookuptable);
+
         MFT fft(windowSize, normMean, sfa);
 
         for (auto ts : samples)

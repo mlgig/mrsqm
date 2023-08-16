@@ -42,6 +42,8 @@ public:
 	// void printHistogram();
 	void lookup(TimeSeries & signature, unsigned short* word);
 	void lookup(double* data, unsigned int dataSize, unsigned short* word);
+	std::vector< std::vector<double> > get_lookuptable();
+	void set_lookuptable(std::vector< std::vector<double> > table);
 
 	static void test();
 };

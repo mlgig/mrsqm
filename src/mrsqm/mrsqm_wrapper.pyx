@@ -146,7 +146,10 @@ cdef extern from "sfa/SFAWrapper.cpp":
         SFAWrapper(int, int, int, bool, bool)        
         void fit(vector[vector[double]])
         vector[string] transform(vector[vector[double]])
+        vector[string] transform_with_lookuptable(vector[vector[double]], vector[vector[double]])
+        vector[vector[double]] get_lookuptable()
     # cdef void printHello()
+
 
 cdef class PySFA:
     '''
@@ -166,6 +169,12 @@ cdef class PySFA:
 
     def transform(self, X):
         return self.thisptr.transform(X)
+
+    def transform_with_lookuptable(self, X, lookuptable): # no need to fit 
+        return self.thisptr.transform_with_lookuptable(X, lookuptable)
+
+    def get_lookuptable(self):
+        return self.thisptr.get_lookuptable()
 
 
 
@@ -334,11 +343,13 @@ class MrSQMTransformer:
                     for ts in ts_x.iloc[:,i]:
                         sr = ps.timeseries2SAXseq(ts)
                         tssr.append(sr)
-                elif  cfg['method'] == 'sfa':
+                elif  cfg['method'] == 'sfa':                                        
                     if 'signature' not in cfg:
-                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(ts_x_array)
+                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(ts_x_array).get_lookuptable()
                     
-                    tssr = cfg['signature'].transform(ts_x_array)
+
+                    #tssr = cfg['signature'].transform(ts_x_array)
+                    tssr = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).transform_with_lookuptable(ts_x_array, cfg['signature'])
                 multi_tssr.append(tssr)        
 
         return multi_tssr

@@ -162,7 +162,7 @@ public:
 
 	
 
-	std::string segment2SAX(std::vector<double> &timeseries, int cur_pos, char char_start){
+	std::string segment2SAX(std::vector<double> timeseries, int cur_pos, char char_start){
 		int window_end = cur_pos + (window_size-1)*dilation;
 		
 		
@@ -239,7 +239,7 @@ public:
 	}
 
 	//main function to convert a vector of double to a vector of SAX sequences
-	std::vector<std::string> timeseries2SAX(std::vector<double> &timeseries, char char_start){
+	std::vector<std::string> timeseries2SAX(std::vector<double> timeseries, char char_start){
 
 		// length of the time series
 		int ts_length = timeseries.size();
@@ -281,7 +281,7 @@ public:
 	}
 
 	// same but always use 'abc..' for the alphabet
-	std::vector<std::string> timeseries2SAX(std::vector<double> &timeseries){
+	std::vector<std::string> timeseries2SAX(std::vector<double> timeseries){
 		char char_start = 'a';
 		return timeseries2SAX(timeseries,char_start);
 	}
