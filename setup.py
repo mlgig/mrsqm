@@ -1,10 +1,8 @@
-#!/usr/bin/env python3 -u
-# coding: utf-8
-
 __author__ = "Thach Le Nguyen"
 
 from setuptools import setup, Extension, find_packages
 from Cython.Build import cythonize
+
 
 cstuff = Extension('mrsqm.mrsqm_wrapper',
                    language='c++',
@@ -18,15 +16,18 @@ setup(
     version="0.0.4",
     author='Thach Le Nguyen',
     author_email='thalng@protonmail.com',
-    setup_requires=[
-        'setuptools',  # first version to support pyx in Extension
-        'cython',
+    python_requires='>=3.8',
+    install_requires=[
+        "numpy>=1.18",
+        "pandas>=1.0.3",
+        "scikit-learn >= 0.22",
+        "pandas>=1.0.3",
     ],
     packages=find_packages(where='src'),
     package_dir={
         '': 'src'
     },
-    #description='Example python module with cython.',
-    #long_description=open('README.md').read(),
+    description='MrSQM: Fast Time Series Classification with Symbolic Representations',
+    long_description=open('README.md').read(),
     ext_modules=cythonize([cstuff]),
 )
