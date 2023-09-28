@@ -2,6 +2,7 @@ from libcpp.string cimport string
 from libcpp cimport bool
 from libcpp.vector cimport vector
 
+import math
 import numpy as np
 import pandas as pd
 from numpy.random import randint
@@ -277,17 +278,37 @@ class MrSQMTransformer:
     def create_pars(self, min_ws, max_ws, xrep, random_sampling=False, is_sfa=False):
         pars = []      
         if xrep > 0:      
-            if random_sampling:    
+            if random_sampling:                   
+
                 debug_logging("Sampling window size, word length, and alphabet size.")       
-                ws_choices = [int(2**(w/xrep)) for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]            
-                wl_choices = [6,8,10,12,14,16]
-                if is_sfa:
-                    wl_choices = [6,8,10,12,14] # can't handle 16x6 case
-                alphabet_choices = [3,4,5,6]
+
+                candidates = []
+                for wd in [int(2**(w/xrep)) for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]:
+                    for wo in [8,9]:
+                        for als in [2,3,4,5]:
+                            if wo <= (wd + 1):
+                                candidates.append([wd,wo,als])
 
                 nrep = xrep*int(np.log2(max_ws))                
-                for w in range(nrep):
-                    pars.append([np.random.choice(ws_choices) , np.random.choice(wl_choices), np.random.choice(alphabet_choices)])
+                if nrep >= len(candidates):
+                    pars = candidates
+                else:
+                    selected = np.random.choice(range(len(candidates)), replace=False, size = nrep)
+                    pars = [candidates[i] for i in selected]
+                
+                # ws_choices = [int(2**(w/xrep)) for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]            
+                # wl_choices = [6,8,10,12,14,16]
+                # if is_sfa:
+                #     wl_choices = [8,10,12,14,16] # can't handle 16x6 case
+                # alphabet_choices = [2,3,4]
+
+                # nrep = xrep*int(np.log2(max_ws))                
+                # for w in range(nrep):
+                #     random_window_size = np.random.choice(ws_choices)
+                #     random_word_length = min(random_window_size + 1, np.random.choice(wl_choices))
+                #     random_alphabet_size = np.random.choice(alphabet_choices)
+                #     pars.append([random_window_size, random_word_length,random_alphabet_size])
+                    #pars.append([np.random.choice(ws_choices) , np.random.choice(wl_choices), np.random.choice(alphabet_choices)])
             else:
                 #debug_logging("Doubling the window while fixing word length and alphabet size.")                   
                 #pars = [[int(2**(w/xrep)),8,4] for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]     
@@ -298,8 +319,30 @@ class MrSQMTransformer:
             
         
         return pars            
-            
-            
+
+    def create_pars_new(self, max_ws, k):
+
+        candidates = [[wd,wo,als] for wd in range(8,max_ws) for wo in [8,9] for als in [2,3,4,5]]
+        p = np.array([a*2+1 for a in range(max_ws-9,-1,-1) for i in range(8)])
+        p = p / np.sum(p)
+
+        nrep = k*int(np.log2(max_ws))                
+        if nrep >= len(candidates):
+            pars = candidates
+        else:
+            selected = np.random.choice(range(len(candidates)), replace=False, size = nrep,p = p)
+            pars = [candidates[i] for i in selected]
+
+
+        # pars = []
+        
+        # for i in range(k*int(np.log2(max_ws))):
+        #     random_window_size = min(int(np.abs(np.random.normal(0.0, max_ws/4.5))) + 8, max_ws)
+        #     random_word_length = np.random.choice(range(6,min(17,random_window_size + 1)))
+        #     random_alphabet_size = np.random.choice([3,4,5,6])
+        #     pars.append([random_window_size, random_word_length,random_alphabet_size])
+    
+        return pars
 
     def transform_time_series(self, ts_x):
         debug_logging("Transform time series to symbolic representations.")
@@ -321,6 +364,7 @@ class MrSQMTransformer:
             
             
             pars = self.create_pars(min_ws, max_ws, self.nsax, random_sampling=True, is_sfa=False)            
+            #pars = self.create_pars_new(max_ws, self.nsax)
             for p in pars:
                 self.config.append(
                         {'method': 'sax', 'window': p[0], 'word': p[1], 'alphabet': p[2], 
@@ -328,6 +372,7 @@ class MrSQMTransformer:
                         'dilation': 1})
             
             pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=True, is_sfa=True)            
+            #pars = self.create_pars_new(max_ws, self.nsfa)
             for p in pars:
                 self.config.append(
                         {'method': 'sfa', 
