@@ -5,7 +5,7 @@ from libcpp.vector cimport vector
 import math
 import numpy as np
 import pandas as pd
-from numpy.random import randint
+# from numpy.random import randint
 from sklearn.linear_model import LogisticRegression, RidgeClassifierCV
 
 from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
@@ -243,8 +243,10 @@ class MrSQMTransformer:
         self.nsfa = nsfa
         self.firstdiff = firstdiff
         self.sfa_norm = sfa_norm
-        if random_state is not None:
-            np.random.seed(random_state)
+        self.rng = np.random.default_rng(random_state)
+        # if random_state is not None:
+        #     np.random.seed(random_state)
+            
         # self.random_state = (
         #     np.int32(random_state) if isinstance(random_state, int) else None
         # )
@@ -293,7 +295,7 @@ class MrSQMTransformer:
                 if nrep >= len(candidates):
                     pars = candidates
                 else:
-                    selected = np.random.choice(range(len(candidates)), replace=False, size = nrep)
+                    selected = self.rng.choice(range(len(candidates)), replace=False, size = nrep)
                     pars = [candidates[i] for i in selected]
                 
                 # ws_choices = [int(2**(w/xrep)) for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]            
@@ -330,7 +332,7 @@ class MrSQMTransformer:
         if nrep >= len(candidates):
             pars = candidates
         else:
-            selected = np.random.choice(range(len(candidates)), replace=False, size = nrep,p = p)
+            selected = self.rng.choice(range(len(candidates)), replace=False, size = nrep,p = p)
             pars = [candidates[i] for i in selected]
 
 
@@ -381,7 +383,7 @@ class MrSQMTransformer:
                         'alphabet': p[2] , 
                         'normSFA': False, 
                         'normTS': self.sfa_norm,
-                        'diff': np.random.choice([True,False])
+                        'diff': self.rng.choice([True,False])
                         })        
 
         
@@ -412,22 +414,22 @@ class MrSQMTransformer:
   
     def sample_random_sequences(self, seqs, min_length, max_length, max_n_seq):  
                 
-        output = set()
+        output = {} # because set doesn't maintain order
         splitted_seqs = [s.split(b' ') for s in seqs]
         n_input = len(seqs)       
 
         # while len(output) < n_seq: #infinity loop if sequences are too alike
         for i in range(0, max_n_seq):
-            did = randint(0,n_input)
-            wid = randint(0,len(splitted_seqs[did]))
+            did = self.rng.integers(0,high=n_input)
+            wid = self.rng.integers(0,high=len(splitted_seqs[did]))
             word = splitted_seqs[did][wid]
             
-            s_length = randint(min_length, min(len(word) + 1, max_length + 1))
-            start = randint(0,len(word) - s_length + 1)        
+            s_length = self.rng.integers(min_length, high=min(len(word) + 1, max_length + 1))
+            start = self.rng.integers(0,high=len(word) - s_length + 1)        
             sampled = word[start:(start + s_length)]
-            output.add(sampled)
+            output[sampled] = 1            
         
-        return list(output)
+        return list(output.keys())
 
     def feature_selection_on_train(self, mr_seqs, y):
         debug_logging("Compute train data in subsequence space.")
@@ -438,16 +440,19 @@ class MrSQMTransformer:
         #for rep, seq_features in zip(mr_seqs, self.sequences):            
             rep = mr_seqs[i]
             seq_features = self.sequences[i]
-            fm = np.zeros((len(rep), len(seq_features)),dtype = np.int32)
+            fm = np.zeros((len(rep), len(seq_features)),dtype = np.int32)            
             ft = PyFeatureTrie(seq_features)
-            for ii,s in enumerate(rep):
+            for ii,s in enumerate(rep):                
                 fm[ii,:] = ft.search(s)            
+                
             fm = fm > 0 # binary only
+            
 
             fs = SelectKBest(chi2, k=min(self.fpr, fm.shape[1]))
             if self.strat == 'RS':
                 debug_logging("Filter subsequences of this representation with chi2 (only with RS).")
                 fm = fs.fit_transform(fm, y)
+                
                 self.sequences[i] = [seq_features[ii] for ii in fs.get_support(indices=True)]               
 
 
@@ -495,7 +500,7 @@ class MrSQMTransformer:
             miner = PySQM(self.spr,0.0)
             mined_subs = miner.mine(rep, int_y)
             debug_logging("Randomly pick " + str(self.fpr) + " subsequences from the list.")
-            mined_subs = np.random.permutation(mined_subs)[:self.fpr].tolist()
+            mined_subs = self.rng.permutation(mined_subs)[:self.fpr].tolist()
 
         elif self.strat == 'R':
             debug_logging("Random sampling " + str(self.fpr) + " subsequences from this symbolic representation.")
@@ -527,6 +532,7 @@ class MrSQMTransformer:
             self.sequences.append(mined)  
         
         
+        
         self.feature_selection_on_train(mr_seqs, int_y)       
 
         return self
@@ -546,8 +552,7 @@ class MrSQMTransformer:
         
         for rep in mr_seqs:
             mined = self.mine(rep,int_y)
-            self.sequences.append(mined)
-    
+            self.sequences.append(mined)   
         
         
         debug_logging("Compute feature vectors.")
@@ -613,7 +618,7 @@ class MrSQMClassifier:
         debug_logging("Fit training data.")        
         train_x = self.transformer.fit_transform(X,y)
         debug_logging("Fit logistic regression model.")
-        self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)        
+        self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced', random_state=0).fit(train_x, y)        
         # self.clf = RidgeClassifierCV(alphas = np.logspace(-3, 3, 10), normalize = True).fit(train_x, y)        
         self.classes_ = self.clf.classes_ # shouldn't matter  
 
