@@ -13,15 +13,14 @@ cstuff = Extension('mrsqm.mrsqm_wrapper',
 
 setup(
     name='mrsqm',
-    version="0.0.4",
+    version="0.0.5",
     author='Thach Le Nguyen',
     author_email='thalng@protonmail.com',
-    python_requires='>=3.8',
+    python_requires='>=3.7',
     install_requires=[
         "numpy>=1.18",
         "pandas>=1.0.3",
-        "scikit-learn >= 0.22",
-        "pandas>=1.0.3",
+        "scikit-learn >= 0.22",        
     ],
     packages=find_packages(where='src'),
     package_dir={
