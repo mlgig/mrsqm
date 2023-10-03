@@ -5,7 +5,7 @@ from libcpp.vector cimport vector
 import math
 import numpy as np
 import pandas as pd
-# from numpy.random import randint
+
 from sklearn.linear_model import LogisticRegression, RidgeClassifierCV
 
 from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
@@ -17,6 +17,8 @@ import logging
 def debug_logging(message):
     logging.info(message)
 
+
+# from sktime
 def from_nested_to_2d_array(X, return_numpy=False):
     """Convert nested Panel to 2D numpy Panel.
 
@@ -39,8 +41,6 @@ def from_nested_to_2d_array(X, return_numpy=False):
      Xt : pandas DataFrame
         Transformed DataFrame in tabular format
     """
-    # TODO does not handle dataframes with nested series columns *and*
-    #  standard columns containing only primitives
 
     # convert nested data into tabular data
     if isinstance(X, pd.Series):
@@ -159,7 +159,7 @@ cdef class PySFA:
     cdef SFAWrapper * thisptr      # hold a C++ instance which we're wrapping
 
     def __cinit__(self, int N, int w, int a, bool norm, bool normTS):
-        self.thisptr = new SFAWrapper(N, w, a, norm, normTS)
+        self.thisptr = new SFAWrapper(N, w + 1, a, norm, normTS) # w+1 to skip second coef 
 
     def __dealloc__(self):
         del self.thisptr
@@ -220,7 +220,7 @@ cdef class PySQM:
 class MrSQMTransformer:
     '''     
     Overview: MrSQM is an efficient time series classifier utilizing symbolic representations of time series. MrSQM implements four different feature selection strategies (R,S,RS,SR) that can quickly select subsequences from multiple symbolic representations of time series data.
-    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True):
+    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 0, nsfa = 1, custom_config=None, random_state = None, sfa_norm = True, first_diff = True):
 
     Parameters
     ----------
@@ -231,25 +231,22 @@ class MrSQMTransformer:
     nsax                : int, control the number of representations produced by sax transformation.
     nsfa                : int, control the number of representations produced by sfa transformation.
     custom_config       : dict, customized parameters for the symbolic transformation.
-    random_state        : set random seed for classifier. By default 'none'.
-    ts_norm             : time series normalisation (standardisation). By default set to 'True'.
+    random_state        : int, set random seed for classifier. By default 'none'.
+    ts_norm             : bool, time series normalisation (standardisation). By default set to 'True'. Only affect SFA.
+    sfa_norm            : bool, only affect SFA.
+    first_diff          : bool, whether to use the first difference in the transformation.
 
     '''
 
-    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True, firstdiff = True):
+    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 0, nsfa = 1, custom_config=None, random_state = None, sfa_norm = True, first_diff = True):
         
 
         self.nsax = nsax
         self.nsfa = nsfa
-        self.firstdiff = firstdiff
+        self.first_diff = first_diff
         self.sfa_norm = sfa_norm
         self.rng = np.random.default_rng(random_state)
-        # if random_state is not None:
-        #     np.random.seed(random_state)
-            
-        # self.random_state = (
-        #     np.int32(random_state) if isinstance(random_state, int) else None
-        # )
+        
 
         if custom_config is None:
             self.config = [] # http://effbot.org/zone/default-values.htm
@@ -286,7 +283,7 @@ class MrSQMTransformer:
 
                 candidates = []
                 for wd in [int(2**(w/xrep)) for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]:
-                    for wo in [8,9]:
+                    for wo in [7,8]:
                         for als in [2,3,4,5]:
                             if wo <= (wd + 1):
                                 candidates.append([wd,wo,als])
@@ -298,19 +295,7 @@ class MrSQMTransformer:
                     selected = self.rng.choice(range(len(candidates)), replace=False, size = nrep)
                     pars = [candidates[i] for i in selected]
                 
-                # ws_choices = [int(2**(w/xrep)) for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]            
-                # wl_choices = [6,8,10,12,14,16]
-                # if is_sfa:
-                #     wl_choices = [8,10,12,14,16] # can't handle 16x6 case
-                # alphabet_choices = [2,3,4]
-
-                # nrep = xrep*int(np.log2(max_ws))                
-                # for w in range(nrep):
-                #     random_window_size = np.random.choice(ws_choices)
-                #     random_word_length = min(random_window_size + 1, np.random.choice(wl_choices))
-                #     random_alphabet_size = np.random.choice(alphabet_choices)
-                #     pars.append([random_window_size, random_word_length,random_alphabet_size])
-                    #pars.append([np.random.choice(ws_choices) , np.random.choice(wl_choices), np.random.choice(alphabet_choices)])
+               
             else:
                 #debug_logging("Doubling the window while fixing word length and alphabet size.")                   
                 #pars = [[int(2**(w/xrep)),8,4] for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]     
@@ -321,30 +306,7 @@ class MrSQMTransformer:
             
         
         return pars            
-
-    def create_pars_new(self, max_ws, k):
-
-        candidates = [[wd,wo,als] for wd in range(8,max_ws) for wo in [8,9] for als in [2,3,4,5]]
-        p = np.array([a*2+1 for a in range(max_ws-9,-1,-1) for i in range(8)])
-        p = p / np.sum(p)
-
-        nrep = k*int(np.log2(max_ws))                
-        if nrep >= len(candidates):
-            pars = candidates
-        else:
-            selected = self.rng.choice(range(len(candidates)), replace=False, size = nrep,p = p)
-            pars = [candidates[i] for i in selected]
-
-
-        # pars = []
-        
-        # for i in range(k*int(np.log2(max_ws))):
-        #     random_window_size = min(int(np.abs(np.random.normal(0.0, max_ws/4.5))) + 8, max_ws)
-        #     random_word_length = np.random.choice(range(6,min(17,random_window_size + 1)))
-        #     random_alphabet_size = np.random.choice([3,4,5,6])
-        #     pars.append([random_window_size, random_word_length,random_alphabet_size])
-    
-        return pars
+   
 
     def transform_time_series(self, ts_x):
         debug_logging("Transform time series to symbolic representations.")
@@ -365,16 +327,14 @@ class MrSQMTransformer:
             max_ws = (min_len + max_len)//2            
             
             
-            pars = self.create_pars(min_ws, max_ws, self.nsax, random_sampling=True, is_sfa=False)            
-            #pars = self.create_pars_new(max_ws, self.nsax)
+            pars = self.create_pars(min_ws, max_ws, self.nsax, random_sampling=True, is_sfa=False)                        
             for p in pars:
                 self.config.append(
                         {'method': 'sax', 'window': p[0], 'word': p[1], 'alphabet': p[2], 
                         # 'dilation': np.int32(2 ** np.random.uniform(0, np.log2((min_len - 1) / (p[0] - 1))))})
                         'dilation': 1})
             
-            pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=True, is_sfa=True)            
-            #pars = self.create_pars_new(max_ws, self.nsfa)
+            pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=True, is_sfa=True)                        
             for p in pars:
                 self.config.append(
                         {'method': 'sfa', 
@@ -397,16 +357,14 @@ class MrSQMTransformer:
                         sr = ps.timeseries2SAXseq(ts)
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':    
-                    if cfg['diff'] and self.firstdiff:
+                    if cfg['diff'] and self.first_diff:
                         X = X_diff
                     else:
                         X = ts_x_array
                                                             
                     if 'signature' not in cfg:
                         cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(X).get_lookuptable()
-                    
 
-                    #tssr = cfg['signature'].transform(ts_x_array)
                     tssr = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).transform_with_lookuptable(X, cfg['signature'])
                 multi_tssr.append(tssr)        
 
@@ -460,11 +418,9 @@ class MrSQMTransformer:
             full_fm.append(fm)
 
 
-        full_fm = np.hstack(full_fm)
-
-        #self.final_vt = VarianceThreshold()
-        #return self.final_vt.fit_transform(full_fm)
-        return full_fm
+        #full_fm = np.hstack(full_fm)
+        
+        return np.hstack(full_fm)
 
     def feature_selection_on_test(self, mr_seqs):
         debug_logging("Compute test data in subsequence space.")
@@ -483,9 +439,9 @@ class MrSQMTransformer:
             full_fm.append(fm)
 
 
-        full_fm = np.hstack(full_fm)
+        #full_fm = np.hstack(full_fm)
         #return self.final_vt.transform(full_fm)
-        return full_fm
+        return np.hstack(full_fm)
     
 
     def mine(self,rep, int_y):        
