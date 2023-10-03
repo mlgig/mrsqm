@@ -111,8 +111,8 @@ build-verbosity = 2
 
 [build-system]
 requires = [
-    "wheel",
-    "setuptools",
+    "wheel>=0.31.0",
+    "setuptools>=38.6.0",
     "Cython>=0.29.18",
 
     # NumPy dependencies - to update these, sync from

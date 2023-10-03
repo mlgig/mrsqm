@@ -28,5 +28,6 @@ setup(
     },
     description='MrSQM: Fast Time Series Classification with Symbolic Representations',
     long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     ext_modules=cythonize([cstuff]),
 )
