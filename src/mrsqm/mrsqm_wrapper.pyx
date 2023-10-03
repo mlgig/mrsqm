@@ -2,9 +2,10 @@ from libcpp.string cimport string
 from libcpp cimport bool
 from libcpp.vector cimport vector
 
+import math
 import numpy as np
 import pandas as pd
-from numpy.random import randint
+
 from sklearn.linear_model import LogisticRegression, RidgeClassifierCV
 
 from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
@@ -16,6 +17,8 @@ import logging
 def debug_logging(message):
     logging.info(message)
 
+
+# from sktime
 def from_nested_to_2d_array(X, return_numpy=False):
     """Convert nested Panel to 2D numpy Panel.
 
@@ -38,8 +41,6 @@ def from_nested_to_2d_array(X, return_numpy=False):
      Xt : pandas DataFrame
         Transformed DataFrame in tabular format
     """
-    # TODO does not handle dataframes with nested series columns *and*
-    #  standard columns containing only primitives
 
     # convert nested data into tabular data
     if isinstance(X, pd.Series):
@@ -158,7 +159,7 @@ cdef class PySFA:
     cdef SFAWrapper * thisptr      # hold a C++ instance which we're wrapping
 
     def __cinit__(self, int N, int w, int a, bool norm, bool normTS):
-        self.thisptr = new SFAWrapper(N, w, a, norm, normTS)
+        self.thisptr = new SFAWrapper(N, w + 1, a, norm, normTS) # w+1 to skip second coef 
 
     def __dealloc__(self):
         del self.thisptr
@@ -219,7 +220,7 @@ cdef class PySQM:
 class MrSQMTransformer:
     '''     
     Overview: MrSQM is an efficient time series classifier utilizing symbolic representations of time series. MrSQM implements four different feature selection strategies (R,S,RS,SR) that can quickly select subsequences from multiple symbolic representations of time series data.
-    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True):
+    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 0, nsfa = 1, custom_config=None, random_state = None, sfa_norm = True, first_diff = True):
 
     Parameters
     ----------
@@ -230,23 +231,22 @@ class MrSQMTransformer:
     nsax                : int, control the number of representations produced by sax transformation.
     nsfa                : int, control the number of representations produced by sfa transformation.
     custom_config       : dict, customized parameters for the symbolic transformation.
-    random_state        : set random seed for classifier. By default 'none'.
-    ts_norm             : time series normalisation (standardisation). By default set to 'True'.
+    random_state        : int, set random seed for classifier. By default 'none'.
+    ts_norm             : bool, time series normalisation (standardisation). By default set to 'True'. Only affect SFA.
+    sfa_norm            : bool, only affect SFA.
+    first_diff          : bool, whether to use the first difference in the transformation.
 
     '''
 
-    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True, firstdiff = True):
+    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 0, nsfa = 1, custom_config=None, random_state = None, sfa_norm = True, first_diff = True):
         
 
         self.nsax = nsax
         self.nsfa = nsfa
-        self.firstdiff = firstdiff
+        self.first_diff = first_diff
         self.sfa_norm = sfa_norm
-        if random_state is not None:
-            np.random.seed(random_state)
-        # self.random_state = (
-        #     np.int32(random_state) if isinstance(random_state, int) else None
-        # )
+        self.rng = np.random.default_rng(random_state)
+        
 
         if custom_config is None:
             self.config = [] # http://effbot.org/zone/default-values.htm
@@ -277,17 +277,25 @@ class MrSQMTransformer:
     def create_pars(self, min_ws, max_ws, xrep, random_sampling=False, is_sfa=False):
         pars = []      
         if xrep > 0:      
-            if random_sampling:    
+            if random_sampling:                   
+
                 debug_logging("Sampling window size, word length, and alphabet size.")       
-                ws_choices = [int(2**(w/xrep)) for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]            
-                wl_choices = [6,8,10,12,14,16]
-                if is_sfa:
-                    wl_choices = [6,8,10,12,14] # can't handle 16x6 case
-                alphabet_choices = [3,4,5,6]
+
+                candidates = []
+                for wd in [int(2**(w/xrep)) for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]:
+                    for wo in [7,8]:
+                        for als in [2,3,4,5]:
+                            if wo <= (wd + 1):
+                                candidates.append([wd,wo,als])
 
                 nrep = xrep*int(np.log2(max_ws))                
-                for w in range(nrep):
-                    pars.append([np.random.choice(ws_choices) , np.random.choice(wl_choices), np.random.choice(alphabet_choices)])
+                if nrep >= len(candidates):
+                    pars = candidates
+                else:
+                    selected = self.rng.choice(range(len(candidates)), replace=False, size = nrep)
+                    pars = [candidates[i] for i in selected]
+                
+               
             else:
                 #debug_logging("Doubling the window while fixing word length and alphabet size.")                   
                 #pars = [[int(2**(w/xrep)),8,4] for w in range(3*xrep,xrep*int(np.log2(max_ws))+ 1)]     
@@ -298,8 +306,7 @@ class MrSQMTransformer:
             
         
         return pars            
-            
-            
+   
 
     def transform_time_series(self, ts_x):
         debug_logging("Transform time series to symbolic representations.")
@@ -320,14 +327,14 @@ class MrSQMTransformer:
             max_ws = (min_len + max_len)//2            
             
             
-            pars = self.create_pars(min_ws, max_ws, self.nsax, random_sampling=True, is_sfa=False)            
+            pars = self.create_pars(min_ws, max_ws, self.nsax, random_sampling=True, is_sfa=False)                        
             for p in pars:
                 self.config.append(
                         {'method': 'sax', 'window': p[0], 'word': p[1], 'alphabet': p[2], 
                         # 'dilation': np.int32(2 ** np.random.uniform(0, np.log2((min_len - 1) / (p[0] - 1))))})
                         'dilation': 1})
             
-            pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=True, is_sfa=True)            
+            pars = self.create_pars(min_ws, max_ws, self.nsfa, random_sampling=True, is_sfa=True)                        
             for p in pars:
                 self.config.append(
                         {'method': 'sfa', 
@@ -336,7 +343,7 @@ class MrSQMTransformer:
                         'alphabet': p[2] , 
                         'normSFA': False, 
                         'normTS': self.sfa_norm,
-                        'diff': np.random.choice([True,False])
+                        'diff': self.rng.choice([True,False])
                         })        
 
         
@@ -350,16 +357,14 @@ class MrSQMTransformer:
                         sr = ps.timeseries2SAXseq(ts)
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':    
-                    if cfg['diff'] and self.firstdiff:
+                    if cfg['diff'] and self.first_diff:
                         X = X_diff
                     else:
                         X = ts_x_array
                                                             
                     if 'signature' not in cfg:
                         cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(X).get_lookuptable()
-                    
 
-                    #tssr = cfg['signature'].transform(ts_x_array)
                     tssr = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).transform_with_lookuptable(X, cfg['signature'])
                 multi_tssr.append(tssr)        
 
@@ -367,22 +372,22 @@ class MrSQMTransformer:
   
     def sample_random_sequences(self, seqs, min_length, max_length, max_n_seq):  
                 
-        output = set()
+        output = {} # because set doesn't maintain order
         splitted_seqs = [s.split(b' ') for s in seqs]
         n_input = len(seqs)       
 
         # while len(output) < n_seq: #infinity loop if sequences are too alike
         for i in range(0, max_n_seq):
-            did = randint(0,n_input)
-            wid = randint(0,len(splitted_seqs[did]))
+            did = self.rng.integers(0,high=n_input)
+            wid = self.rng.integers(0,high=len(splitted_seqs[did]))
             word = splitted_seqs[did][wid]
             
-            s_length = randint(min_length, min(len(word) + 1, max_length + 1))
-            start = randint(0,len(word) - s_length + 1)        
+            s_length = self.rng.integers(min_length, high=min(len(word) + 1, max_length + 1))
+            start = self.rng.integers(0,high=len(word) - s_length + 1)        
             sampled = word[start:(start + s_length)]
-            output.add(sampled)
+            output[sampled] = 1            
         
-        return list(output)
+        return list(output.keys())
 
     def feature_selection_on_train(self, mr_seqs, y):
         debug_logging("Compute train data in subsequence space.")
@@ -393,16 +398,19 @@ class MrSQMTransformer:
         #for rep, seq_features in zip(mr_seqs, self.sequences):            
             rep = mr_seqs[i]
             seq_features = self.sequences[i]
-            fm = np.zeros((len(rep), len(seq_features)),dtype = np.int32)
+            fm = np.zeros((len(rep), len(seq_features)),dtype = np.int32)            
             ft = PyFeatureTrie(seq_features)
-            for ii,s in enumerate(rep):
+            for ii,s in enumerate(rep):                
                 fm[ii,:] = ft.search(s)            
+                
             fm = fm > 0 # binary only
+            
 
             fs = SelectKBest(chi2, k=min(self.fpr, fm.shape[1]))
             if self.strat == 'RS':
                 debug_logging("Filter subsequences of this representation with chi2 (only with RS).")
                 fm = fs.fit_transform(fm, y)
+                
                 self.sequences[i] = [seq_features[ii] for ii in fs.get_support(indices=True)]               
 
 
@@ -410,11 +418,9 @@ class MrSQMTransformer:
             full_fm.append(fm)
 
 
-        full_fm = np.hstack(full_fm)
-
-        #self.final_vt = VarianceThreshold()
-        #return self.final_vt.fit_transform(full_fm)
-        return full_fm
+        #full_fm = np.hstack(full_fm)
+        
+        return np.hstack(full_fm)
 
     def feature_selection_on_test(self, mr_seqs):
         debug_logging("Compute test data in subsequence space.")
@@ -433,9 +439,9 @@ class MrSQMTransformer:
             full_fm.append(fm)
 
 
-        full_fm = np.hstack(full_fm)
+        #full_fm = np.hstack(full_fm)
         #return self.final_vt.transform(full_fm)
-        return full_fm
+        return np.hstack(full_fm)
     
 
     def mine(self,rep, int_y):        
@@ -450,7 +456,7 @@ class MrSQMTransformer:
             miner = PySQM(self.spr,0.0)
             mined_subs = miner.mine(rep, int_y)
             debug_logging("Randomly pick " + str(self.fpr) + " subsequences from the list.")
-            mined_subs = np.random.permutation(mined_subs)[:self.fpr].tolist()
+            mined_subs = self.rng.permutation(mined_subs)[:self.fpr].tolist()
 
         elif self.strat == 'R':
             debug_logging("Random sampling " + str(self.fpr) + " subsequences from this symbolic representation.")
@@ -482,6 +488,7 @@ class MrSQMTransformer:
             self.sequences.append(mined)  
         
         
+        
         self.feature_selection_on_train(mr_seqs, int_y)       
 
         return self
@@ -501,8 +508,7 @@ class MrSQMTransformer:
         
         for rep in mr_seqs:
             mined = self.mine(rep,int_y)
-            self.sequences.append(mined)
-    
+            self.sequences.append(mined)   
         
         
         debug_logging("Compute feature vectors.")
@@ -568,7 +574,7 @@ class MrSQMClassifier:
         debug_logging("Fit training data.")        
         train_x = self.transformer.fit_transform(X,y)
         debug_logging("Fit logistic regression model.")
-        self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced').fit(train_x, y)        
+        self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced', random_state=0).fit(train_x, y)        
         # self.clf = RidgeClassifierCV(alphas = np.logspace(-3, 3, 10), normalize = True).fit(train_x, y)        
         self.classes_ = self.clf.classes_ # shouldn't matter  
 

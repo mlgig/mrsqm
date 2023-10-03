@@ -48,9 +48,15 @@ private:
     {
         char startChar = '!';
         std::string strWord = "";
+        
+        uint ai = 0;       
+
         for (uint i = 0; i < word.size(); i++)
         {
-            strWord += startChar + i * alphabetSize + word[i];
+            if (i != 1) {
+                strWord += startChar + ai * alphabetSize + word[i];
+                ai++;
+            }
         }
         return strWord;
     }
@@ -134,7 +140,7 @@ public:
             
             
 
-            for (uint i = 1; i < words.size(); i++)
+            for (uint i = 1; i < words.size(); i++) 
             {
                 seq += " " + word2string(words[i], maxSymbols);
             }
