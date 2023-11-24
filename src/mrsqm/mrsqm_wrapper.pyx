@@ -265,6 +265,9 @@ class MrSQMTransformer:
         
         self.filters = [] # feature filters (one filter for a rep) for test data transformation
 
+        self.fitted = False
+        self.multivariate = False
+
         debug_logging("Initialize MrSQM Classifier.")
         debug_logging("Feature Selection Strategy: " + strat)
         debug_logging("SAX Reps: " + str(self.nsax) + "x")
@@ -308,23 +311,24 @@ class MrSQMTransformer:
         return pars            
    
 
-    def transform_time_series(self, ts_x):
+    def transform_time_series(self, X):
         debug_logging("Transform time series to symbolic representations.")
         
         multi_tssr = []   
 
-        ts_x_array = from_nested_to_2d_array(ts_x).values
-        X_diff = np.diff(ts_x_array, axis=1, prepend=0)
+        #ts_x_array = from_nested_to_2d_array(ts_x).values
+        X_diff = np.diff(X, axis=2, prepend=0)
      
         if not self.config:
             self.config = []
             
             min_ws = 16
-            min_len = max_len = len(ts_x.iloc[0, 0])
-            for a in ts_x.iloc[:, 0]:
-                min_len = min(min_len, len(a)) 
-                max_len = max(max_len, len(a))
-            max_ws = (min_len + max_len)//2            
+            # min_len = max_len = X.shape[2]
+            # for a in ts_x.iloc[:, 0]:
+            #     min_len = min(min_len, len(a)) 
+            #     max_len = max(max_len, len(a))
+            # max_ws = (min_len + max_len)//2            
+            max_ws = X.shape[2]
             
             
             pars = self.create_pars(min_ws, max_ws, self.nsax, random_sampling=True, is_sfa=False)                        
@@ -343,29 +347,29 @@ class MrSQMTransformer:
                         'alphabet': p[2] , 
                         'normSFA': False, 
                         'normTS': self.sfa_norm,
-                        'diff': self.rng.choice([True,False])
+                        'diff': self.rng.choice([True,False]),
+                        'signature':[]
                         })        
 
         
         for cfg in self.config:
-            for i in range(ts_x.shape[1]):
+            for i in range(X.shape[1]):
                 tssr = []
 
                 if cfg['method'] == 'sax':  # convert time series to SAX                    
                     ps = PySAX(cfg['window'], cfg['word'], cfg['alphabet'], cfg['dilation'])
-                    for ts in ts_x.iloc[:,i]:
+                    for ts in X[:,i,:]:
                         sr = ps.timeseries2SAXseq(ts)
                         tssr.append(sr)
                 elif  cfg['method'] == 'sfa':    
                     if cfg['diff'] and self.first_diff:
-                        X = X_diff
-                    else:
-                        X = ts_x_array
-                                                            
-                    if 'signature' not in cfg:
-                        cfg['signature'] = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(X).get_lookuptable()
+                        X_tmp = X_diff     
+                    else:               
+                        X_tmp = X                               
+                    if len(cfg['signature']) < (i+1):
+                        cfg['signature'].append(PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(X_tmp[:,i,:]).get_lookuptable())
 
-                    tssr = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).transform_with_lookuptable(X, cfg['signature'])
+                    tssr = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).transform_with_lookuptable(X_tmp[:,i,:], cfg['signature'][i])
                 multi_tssr.append(tssr)        
 
         return multi_tssr
@@ -489,7 +493,9 @@ class MrSQMTransformer:
         
         
         
-        self.feature_selection_on_train(mr_seqs, int_y)       
+        self.feature_selection_on_train(mr_seqs, int_y)   
+        self.fitted = True    
+        self.multivariate = X.shape[1] > 1
 
         return self
     
@@ -512,7 +518,10 @@ class MrSQMTransformer:
         
         
         debug_logging("Compute feature vectors.")
-        train_x = self.feature_selection_on_train(mr_seqs, int_y)       
+        train_x = self.feature_selection_on_train(mr_seqs, int_y)    
+
+        self.fitted = True    
+        self.multivariate = X.shape[1] > 1
 
         return train_x
 
@@ -522,8 +531,13 @@ class MrSQMTransformer:
         return X_transform
 
     
-    def get_saliency_map(self, ts, coefs):        
+    def get_saliency_map(self, ts, coefs):
 
+        if not self.fitted:
+            return None
+        if self.multivariate: # only work with univariate data for the time being
+            return None
+        
         is_multiclass = len(self.classes_) > 2
         weighted_ts = np.zeros((len(self.classes_), len(ts)))
 
