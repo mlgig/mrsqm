@@ -821,7 +821,7 @@ class GuidedMrSQM:
         # while len(output) < n_seq: #infinity loop if sequences are too alike
         for i in range(0, max_n_seq):
             did = self.rng.integers(0,high=n_input)
-            if prob is None:                
+            if prob is None or np.isnan(prob[did,:]).any():                
                 wid = self.rng.integers(0,high=len(splitted_seqs[did]))    
             else:
                 wid = self.rng.choice(np.arange(0,len(splitted_seqs[did])),p=prob[did,:])           
@@ -919,6 +919,9 @@ class GuidedMrSQM:
         for i in range(self.training_explain.shape[1] - window_size + 1):
             wim[:,i] = np.sum(self.training_explain[:,i:(i+window_size)],axis=1)
         wim = wim/np.sum(wim,axis=1).reshape(wim.shape[0],1)
+        # check if Nan
+
+
         return wim
 
     def fit(self, X, X_explain, y):
