@@ -154,3 +154,5 @@ build_doc_site/
 # dev files
 envs/
 *.html
+
+*.pkl
