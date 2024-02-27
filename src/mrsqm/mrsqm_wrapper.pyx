@@ -18,90 +18,40 @@ def debug_logging(message):
     logging.info(message)
 
 
-# from sktime
-def from_nested_to_2d_array(X, return_numpy=False):
-    """Convert nested Panel to 2D numpy Panel.
-
-    Convert nested pandas DataFrame or Series with NumPy arrays or
-    pandas Series in cells into tabular
-    pandas DataFrame with primitives in cells, i.e. a data frame with the
-    same number of rows as the input data and
-    as many columns as there are observations in the nested series. Requires
-    series to be have the same index.
+def check_X_format(X):
+    """Check the format of the input data.
 
     Parameters
     ----------
-    X : nested pd.DataFrame or nested pd.Series
-    return_numpy : bool, default = False
-        - If True, returns a NumPy array of the tabular data.
-        - If False, returns a pandas DataFrame with row and column names.
+    X : nested pandas DataFrame or nested pandas Series
+        The input data.
 
     Returns
     -------
-     Xt : pandas DataFrame
-        Transformed DataFrame in tabular format
+    X : pandas DataFrame
+        The input data in tabular format.
     """
-
-    # convert nested data into tabular data
-    if isinstance(X, pd.Series):
-        Xt = np.array(X.tolist())
-
-    elif isinstance(X, pd.DataFrame):
-        try:
-            Xt = np.hstack([X.iloc[:, i].tolist() for i in range(X.shape[1])])
-
-        # except strange key error for specific case
-        except KeyError:
-            if (X.shape == (1, 1)) and (X.iloc[0, 0].shape == (1,)):
-                # in fact only breaks when an additional condition is met,
-                # namely that the index of the time series of a single value
-                # does not start with 0, e.g. pd.RangeIndex(9, 10) as is the
-                # case in forecasting
-                Xt = X.iloc[0, 0].values
-            else:
-                raise
-
-        if Xt.ndim != 2:
+    if isinstance(X, (pd.DataFrame, pd.Series)):
+        X_3d = np.stack(X.applymap(lambda cell:cell.to_numpy()).apply(lambda row: np.stack(row),axis=1).to_numpy())
+        return X_3d
+    elif isinstance(X, np.ndarray):
+        if X.ndim == 3:
+            return X
+        elif X.ndim == 2:
+            return X[:, np.newaxis, :]
+        else:
             raise ValueError(
-                "Tabularization failed, it's possible that not "
-                "all series were of equal length"
+                f"X must be 2D or 3D, but found: {X.ndim}D"
             )
-
     else:
         raise ValueError(
-            f"Expected input is pandas Series or pandas DataFrame, "
+            f"X must be pandas DataFrame, pandas Series or numpy array, "
             f"but found: {type(X)}"
         )
 
-    if return_numpy:
-        return Xt
-
-    Xt = pd.DataFrame(Xt)
-
-    # create column names from time index
-    if X.ndim == 1:
-        time_index = (
-            X.iloc[0].index
-            if hasattr(X.iloc[0], "index")
-            else np.arange(X.iloc[0].shape[0])
-        )
-        columns = [f"{X.name}__{i}" for i in time_index]
-
-    else:
-        columns = []
-        for colname, col in X.items():
-            time_index = (
-                col.iloc[0].index
-                if hasattr(col.iloc[0], "index")
-                else np.arange(col.iloc[0].shape[0])
-            )
-            columns.extend([f"{colname}__{i}" for i in time_index])
-
-    Xt.index = X.index
-    Xt.columns = columns
-    return Xt
-
-
+    return None
+        
+    
 
 ######################### SAX #########################
 
@@ -475,6 +425,8 @@ class MrSQMTransformer:
 
 
     def fit(self, X, y):
+        X = check_X_format(X)
+
         debug_logging("Fit training data.")
         self.classes_ = np.unique(y) #because sklearn also uses np.unique
 
@@ -500,6 +452,8 @@ class MrSQMTransformer:
         return self
     
     def fit_transform(self, X, y):
+        X = check_X_format(X)
+
         debug_logging("Fit training data.")
         self.classes_ = np.unique(y) #because sklearn also uses np.unique
 
@@ -526,6 +480,8 @@ class MrSQMTransformer:
         return train_x
 
     def transform(self,X):
+        X = check_X_format(X)
+
         mr_seqs = self.transform_time_series(X)       
         X_transform = self.feature_selection_on_test(mr_seqs)
         return X_transform
