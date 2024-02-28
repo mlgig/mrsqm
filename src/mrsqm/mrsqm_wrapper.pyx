@@ -169,8 +169,8 @@ cdef class PySQM:
 ######################### MrSQM Transformer #########################
 class MrSQMTransformer:
     '''     
-    Overview: MrSQM is an efficient time series classifier utilizing symbolic representations of time series. MrSQM implements four different feature selection strategies (R,S,RS,SR) that can quickly select subsequences from multiple symbolic representations of time series data.
-    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 0, nsfa = 1, custom_config=None, random_state = None, sfa_norm = True, first_diff = True):
+    Overview: Transformer implementation of MrSQM.
+    
 
     Parameters
     ----------
@@ -181,10 +181,9 @@ class MrSQMTransformer:
     nsax                : int, control the number of representations produced by sax transformation.
     nsfa                : int, control the number of representations produced by sfa transformation.
     custom_config       : dict, customized parameters for the symbolic transformation.
-    random_state        : int, set random seed for classifier. By default 'none'.
-    ts_norm             : bool, time series normalisation (standardisation). By default set to 'True'. Only affect SFA.
-    sfa_norm            : bool, only affect SFA.
-    first_diff          : bool, whether to use the first difference in the transformation.
+    random_state        : set random seed for classifier. By default 'none'.
+    sfa_norm            : to be passed to sfa transformer.
+    first_diff          : randomly use of first difference in transformation.
 
     '''
 
@@ -195,35 +194,15 @@ class MrSQMTransformer:
         self.nsfa = nsfa
         self.first_diff = first_diff
         self.sfa_norm = sfa_norm
-        self.rng = np.random.default_rng(random_state)
+        self.random_state = random_state        
+        self.custom_config = custom_config        
+        self.strat = strat
+        self.features_per_rep = features_per_rep
+        self.selection_per_rep = selection_per_rep
         
-
-        if custom_config is None:
-            self.config = [] # http://effbot.org/zone/default-values.htm
-        else:
-            self.config = custom_config
-
-        self.strat = strat   
-
-        # all the unique labels in the data
-        # in case of binary data the first one is always the negative class
-        self.classes_ = []
-        self.clf = None # scikit-learn model       
-
-        self.fpr = features_per_rep
-        self.spr = selection_per_rep
-        
-        self.filters = [] # feature filters (one filter for a rep) for test data transformation
 
         self.fitted = False
-        self.multivariate = False
-
-        debug_logging("Initialize MrSQM Classifier.")
-        debug_logging("Feature Selection Strategy: " + strat)
-        debug_logging("SAX Reps: " + str(self.nsax) + "x")
-        debug_logging("SFA Reps: " + str(self.nsfa) + "x")
-        debug_logging("Number of features per rep: " + str(self.fpr))
-        debug_logging("Number of candidates per rep (only for SR and RS):" + str(self.spr))
+        self.multivariate = False       
         
      
 
@@ -360,7 +339,7 @@ class MrSQMTransformer:
             fm = fm > 0 # binary only
             
 
-            fs = SelectKBest(chi2, k=min(self.fpr, fm.shape[1]))
+            fs = SelectKBest(chi2, k=min(self.features_per_rep, fm.shape[1]))
             if self.strat == 'RS':
                 debug_logging("Filter subsequences of this representation with chi2 (only with RS).")
                 fm = fs.fit_transform(fm, y)
@@ -401,23 +380,23 @@ class MrSQMTransformer:
     def mine(self,rep, int_y):        
         mined_subs = []
         if self.strat == 'S':
-            debug_logging("Select " + str(self.fpr) + " discrimative subsequences with SQM.")
-            miner = PySQM(self.fpr,0.0)
+            debug_logging("Select " + str(self.features_per_rep) + " discrimative subsequences with SQM.")
+            miner = PySQM(self.features_per_rep,0.0)
             mined_subs = miner.mine(rep, int_y)
 
         elif self.strat == 'SR':
-            debug_logging("Select " + str(self.spr) + " discrimative subsequences with SQM.")
-            miner = PySQM(self.spr,0.0)
+            debug_logging("Select " + str(self.selection_per_rep) + " discrimative subsequences with SQM.")
+            miner = PySQM(self.selection_per_rep,0.0)
             mined_subs = miner.mine(rep, int_y)
-            debug_logging("Randomly pick " + str(self.fpr) + " subsequences from the list.")
-            mined_subs = self.rng.permutation(mined_subs)[:self.fpr].tolist()
+            debug_logging("Randomly pick " + str(self.features_per_rep) + " subsequences from the list.")
+            mined_subs = self.rng.permutation(mined_subs)[:self.features_per_rep].tolist()
 
         elif self.strat == 'R':
-            debug_logging("Random sampling " + str(self.fpr) + " subsequences from this symbolic representation.")
-            mined_subs = self.sample_random_sequences(rep,3,16,self.fpr)
+            debug_logging("Random sampling " + str(self.features_per_rep) + " subsequences from this symbolic representation.")
+            mined_subs = self.sample_random_sequences(rep,3,16,self.features_per_rep)
         elif self.strat == 'RS':
-            debug_logging("Random sampling " + str(self.spr) + " subsequences from this symbolic representation.")
-            mined_subs = self.sample_random_sequences(rep,3,16,self.spr)
+            debug_logging("Random sampling " + str(self.selection_per_rep) + " subsequences from this symbolic representation.")
+            mined_subs = self.sample_random_sequences(rep,3,16,self.selection_per_rep)
 
         debug_logging("Found " + str(len(mined_subs)) + " unique subsequences.")
         return mined_subs
@@ -425,7 +404,14 @@ class MrSQMTransformer:
 
 
     def fit(self, X, y):
+        self.rng = np.random.default_rng(self.random_state)
+        if self.custom_config is None:
+            self.config = [] # http://effbot.org/zone/default-values.htm
+        else:
+            self.config = self.custom_config
         X = check_X_format(X)
+        self.classes_ = []
+        self.filters = [] # feature filters (one filter for a rep) for test data transformation
 
         debug_logging("Fit training data.")
         self.classes_ = np.unique(y) #because sklearn also uses np.unique
@@ -452,7 +438,14 @@ class MrSQMTransformer:
         return self
     
     def fit_transform(self, X, y):
+        self.rng = np.random.default_rng(self.random_state)
+        if self.custom_config is None:
+            self.config = [] # http://effbot.org/zone/default-values.htm
+        else:
+            self.config = self.custom_config
         X = check_X_format(X)
+        self.classes_ = []
+        self.filters = [] # feature filters (one filter for a rep) for test data transformation
 
         debug_logging("Fit training data.")
         self.classes_ = np.unique(y) #because sklearn also uses np.unique
@@ -515,6 +508,24 @@ class MrSQMTransformer:
             weighted_ts[0, :] = -weighted_ts[1, :]
         return weighted_ts
 
+    def get_params(self, deep=True):
+        return {'strat': self.strat, 
+                'features_per_rep': self.features_per_rep, 
+                'selection_per_rep': self.selection_per_rep, 
+                'nsax': self.nsax, 
+                'nsfa': self.nsfa, 
+                'custom_config': self.custom_config, 
+                'random_state': self.random_state, 
+                'sfa_norm': self.sfa_norm, 
+                'first_diff': self.first_diff,
+                }
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        setattr(self, 'fitted', False)
+        setattr(self, 'multivariate', False)
+        return self
+
 
 
 ######################### MrSQM Classifier #########################
@@ -534,20 +545,43 @@ class MrSQMClassifier:
     nsfa                : int, control the number of representations produced by sfa transformation.
     custom_config       : dict, customized parameters for the symbolic transformation.
     random_state        : set random seed for classifier. By default 'none'.
-    ts_norm             : time series normalisation (standardisation). By default set to 'True'.
+    sfa_norm            : to be passed to sfa transformer.
+    first_diff          : randomly use of first difference in transformation.
+
 
     '''
-    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 1, nsfa = 0, custom_config=None, random_state = None, sfa_norm = True):        
-        self.transformer = MrSQMTransformer(strat = strat, features_per_rep = features_per_rep, selection_per_rep = selection_per_rep, nsax = nsax, nsfa = nsfa, custom_config = custom_config, random_state = random_state, sfa_norm = sfa_norm)
+    def __init__(self, strat = 'RS', features_per_rep = 500, selection_per_rep = 2000, nsax = 0, nsfa = 1, custom_config=None, random_state = None, sfa_norm = True, first_diff = True):
+        self.nsax = nsax
+        self.nsfa = nsfa
+        self.first_diff = first_diff
+        self.sfa_norm = sfa_norm
+        self.random_state = random_state        
+        self.custom_config = custom_config
+        self.strat = strat   
+        self.features_per_rep = features_per_rep
+        self.selection_per_rep = selection_per_rep
+        
+
+        self.fitted = False
+        
+
+        debug_logging("Initialize MrSQM Classifier.")
+        debug_logging("Feature Selection Strategy: " + strat)
+        debug_logging("SAX Reps: " + str(self.nsax) + "x")
+        debug_logging("SFA Reps: " + str(self.nsfa) + "x")
+        debug_logging("Number of features per rep: " + str(self.features_per_rep))
+        debug_logging("Number of candidates per rep (only for SR and RS):" + str(self.selection_per_rep))
+        
     
     def fit(self, X, y):
+        self.transformer = MrSQMTransformer(strat = self.strat, features_per_rep = self.features_per_rep, selection_per_rep = self.selection_per_rep, nsax = self.nsax, nsfa = self.nsfa, custom_config = self.custom_config, random_state = self.random_state, sfa_norm = self.sfa_norm, first_diff = self.first_diff)
         debug_logging("Fit training data.")        
         train_x = self.transformer.fit_transform(X,y)
         debug_logging("Fit logistic regression model.")
         self.clf = LogisticRegression(solver='newton-cg',multi_class = 'multinomial', class_weight='balanced', random_state=0).fit(train_x, y)        
         # self.clf = RidgeClassifierCV(alphas = np.logspace(-3, 3, 10), normalize = True).fit(train_x, y)        
         self.classes_ = self.clf.classes_ # shouldn't matter  
-
+        self.fitted = True
         return self
 
 
@@ -562,5 +596,26 @@ class MrSQMClassifier:
 
     def get_saliency_map(self, ts):
         return self.transformer.get_saliency_map(ts,self.clf.coef_)
+
+    def get_params(self, deep=True):
+        return {'strat': self.strat, 
+                'features_per_rep': self.features_per_rep, 
+                'selection_per_rep': self.selection_per_rep, 
+                'nsax': self.nsax, 
+                'nsfa': self.nsfa, 
+                'custom_config': self.custom_config, 
+                'random_state': self.random_state, 
+                'sfa_norm': self.sfa_norm, 
+                'first_diff': self.first_diff,
+                }
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        setattr(self, 'fitted', False)
+        return self
+
+    def score(self, X, y, sample_weight=None):
+        return self.clf.score(self.transformer.transform(X), y, sample_weight)
+
 
     
