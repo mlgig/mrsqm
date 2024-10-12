@@ -87,4 +87,12 @@ If you use this work, please cite as:
   url = {https://arxiv.org/abs/2109.01036},
   publisher={}
 }
+@article{mrsqm2022-tutorial,
+  title={A short tutorial for time series classification and explanation with MrSQM},
+  author={Le Nguyen, Thach and Ifrim, Georgiana},
+  year={2022},
+  booktitle = {Software Impacts},
+  url = {doi: 10.1016/j.simpa.2021.100197},
+  publisher={Elsevier}
+}
 ```
