@@ -96,3 +96,4 @@ If you use this work, please cite as:
   publisher={Elsevier}
 }
 ```
+*** If you are struggling to install mrsqm from source because of fftw3 you could also consider the [newsfa](https://github.com/mlgig/mrsqm/tree/newsfa) branch. The implementation in this branch uses [SFAFast](https://www.aeon-toolkit.org/en/stable/api_reference/auto_generated/aeon.transformations.collection.dictionary_based.SFAFast.html#aeon.transformations.collection.dictionary_based.SFAFast) instead of C++ SFA so it depends on aeon instead of fftw3. However, experiments on the UCR and UEA archive have shown that this version of mrsqm is a bit slower and less accurate than the main one. ***
