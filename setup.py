@@ -21,9 +21,9 @@ def get_version(rel_path: str) -> str:
 
 cstuff = Extension('mrsqm.mrsqm_wrapper',
                    language='c++',
-                   sources=["src/mrsqm/mrsqm_wrapper.pyx","src/mrsqm/sfa/MFT.cpp","src/mrsqm/sfa/DFT.cpp","src/mrsqm/sfa/SFA.cpp","src/mrsqm/sfa/TimeSeries.cpp"],
+                   sources=["src/mrsqm/mrsqm_wrapper.pyx"],
                    extra_compile_args=["-Wall", "-Ofast", "-g", "-std=c++11", "-ffast-math"],
-                   extra_link_args=["-lfftw3", "-lm", "-L/opt/local/lib"],           
+                   extra_link_args=["-lm", "-L/opt/local/lib"],           
                    include_dirs=['src/mrsqm'])
 
 setup(

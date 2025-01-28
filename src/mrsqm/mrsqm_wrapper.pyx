@@ -9,7 +9,7 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression, RidgeClassifierCV
 
 from sklearn.feature_selection import SelectKBest, chi2, VarianceThreshold
-
+from aeon.transformations.collection.dictionary_based import SFAFast
 
 
 import logging
@@ -92,40 +92,40 @@ cdef class PySAX:
 
 ###########################################################################
 
-cdef extern from "sfa/SFAWrapper.cpp":
-    cdef cppclass SFAWrapper:
-        SFAWrapper(int, int, int, bool, bool)        
-        void fit(vector[vector[double]])
-        vector[string] transform(vector[vector[double]])
-        vector[string] transform_with_lookuptable(vector[vector[double]], vector[vector[double]])
-        vector[vector[double]] get_lookuptable()
-    # cdef void printHello()
+# cdef extern from "sfa/SFAWrapper.cpp":
+#     cdef cppclass SFAWrapper:
+#         SFAWrapper(int, int, int, bool, bool)        
+#         void fit(vector[vector[double]])
+#         vector[string] transform(vector[vector[double]])
+#         vector[string] transform_with_lookuptable(vector[vector[double]], vector[vector[double]])
+#         vector[vector[double]] get_lookuptable()
+#     # cdef void printHello()
 
 
-cdef class PySFA:
-    '''
-    Wrapper of SFA C++ implementation.
-    '''
-    cdef SFAWrapper * thisptr      # hold a C++ instance which we're wrapping
+# cdef class PySFA:
+#     '''
+#     Wrapper of SFA C++ implementation.
+#     '''
+#     cdef SFAWrapper * thisptr      # hold a C++ instance which we're wrapping
 
-    def __cinit__(self, int N, int w, int a, bool norm, bool normTS):
-        self.thisptr = new SFAWrapper(N, w + 1, a, norm, normTS) # w+1 to skip second coef 
+#     def __cinit__(self, int N, int w, int a, bool norm, bool normTS):
+#         self.thisptr = new SFAWrapper(N, w + 1, a, norm, normTS) # w+1 to skip second coef 
 
-    def __dealloc__(self):
-        del self.thisptr
+#     def __dealloc__(self):
+#         del self.thisptr
 
-    def fit(self, X):
-        self.thisptr.fit(X)
-        return self
+#     def fit(self, X):
+#         self.thisptr.fit(X)
+#         return self
 
-    def transform(self, X):
-        return self.thisptr.transform(X)
+#     def transform(self, X):
+#         return self.thisptr.transform(X)
 
-    def transform_with_lookuptable(self, X, lookuptable): # no need to fit 
-        return self.thisptr.transform_with_lookuptable(X, lookuptable)
+#     def transform_with_lookuptable(self, X, lookuptable): # no need to fit 
+#         return self.thisptr.transform_with_lookuptable(X, lookuptable)
 
-    def get_lookuptable(self):
-        return self.thisptr.get_lookuptable()
+#     def get_lookuptable(self):
+#         return self.thisptr.get_lookuptable()
 
 
 
@@ -165,6 +165,31 @@ cdef class PySQM:
 
     def mine(self, vector[string] sequences, vector[int] labels):
         return self.thisptr.mine(sequences, labels)     
+
+class PySFA:
+    def __init__(self, window_size, word_length, alphabet_size):
+        self.window_size = window_size
+        self.word_length = word_length
+        self.alphabet_size = alphabet_size
+        self.tfm = SFAFast(
+                word_length=word_length,
+                alphabet_size=alphabet_size,
+                window_size=window_size,
+                binning_method="equi-width",
+                norm=True,
+                variance=False,  # True gives a tighter lower bound
+                lower_bounding_distances=True,  # This must be set!
+        )
+
+    def fit(self,X,y=None):
+        self.tfm.fit(X)
+        return self
+    # def fit_transform(self,X,y=None):
+        # return self.int2word(self.tfm.fit_transform(X))
+    def transform(self,X):
+        return self.int2word(self.tfm.transform_words(X))
+    def int2word(self,X_tf):
+        return [' '.join([''.join([chr(X_tf[iii,ii,i] + 33 + i * self.alphabet_size) for i in range(self.word_length)]) for ii in range(X_tf.shape[1])]).encode('UTF-8') for iii in range(X_tf.shape[0])]
 
 ######################### MrSQM Transformer #########################
 class MrSQMTransformer:
@@ -296,9 +321,9 @@ class MrSQMTransformer:
                     else:               
                         X_tmp = X                               
                     if len(cfg['signature']) < (i+1):
-                        cfg['signature'].append(PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).fit(X_tmp[:,i,:]).get_lookuptable())
+                        cfg['signature'].append(PySFA(cfg['window'], cfg['word'], cfg['alphabet']).fit(X_tmp[:,i,:]))
 
-                    tssr = PySFA(cfg['window'], cfg['word'], cfg['alphabet'], cfg['normSFA'], cfg['normTS']).transform_with_lookuptable(X_tmp[:,i,:], cfg['signature'][i])
+                    tssr = cfg['signature'][i].transform(X_tmp[:,i,:])
                 multi_tssr.append(tssr)        
 
         return multi_tssr
